@@ -151,6 +151,13 @@ function pickWeekDate(value) {
   selectedWeekStart = getMonday(new Date(value + 'T00:00:00'));
   render();
 }
+function currentWeekRangeLabel(){
+  const mon = getMonday(new Date());
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+
+  return `${fmt(mon)} – ${fmt(sun)}`;
+}
 function isToday(d) { const t=new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
 function fmt(d) { return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
 function pendingCount() { return requests.filter(r=>r.status==='pending').length + shiftRequests.filter(r=>r.status==='pending').length; }
@@ -265,6 +272,12 @@ function visibleSlotsForRole(slots, viewerRole){
 
 function render() {
   const days = getWeekDays();
+  document.getElementById('todayLabelTop').textContent =
+  'Today: ' + new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric'
+  });
   document.getElementById('weekLabel').textContent = fmt(days[0])+' – '+fmt(days[6]);
   const isMgr = role==='manager';
   renderUserChip();
@@ -320,7 +333,9 @@ function renderModeToggle(view){
     </div>
 
     <div class="template-group">
-      <button class="pill-btn" onclick="selectWeek('current')">Current week</button>
+      <<button class="pill-btn" onclick="selectWeek('current')">
+    Current schedule (${currentWeekRangeLabel()})
+</button>
       <button class="pill-btn" onclick="selectWeek('next')">Next week</button>
       <input type="date" onchange="pickWeekDate(this.value)">
     </div>
