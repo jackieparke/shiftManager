@@ -122,7 +122,7 @@ function login(){
   document.getElementById('app').style.display = 'flex';
   render();
 }
-function logout(){
+window.login = function() {
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
