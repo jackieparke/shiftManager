@@ -32,7 +32,7 @@ const EMPLOYEE_IDS = STAFF.filter(s=>s.role!=='Manager').map(s=>s.id);
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const LONG_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-let weekOffset = 0, role = 'manager', activeTab = 'schedule', scheduleMode = 'regular', upcomingPage = 0, activeEmployeeId = 1;
+let role = 'manager', activeTab = 'schedule', scheduleMode = 'regular', upcomingPage = 0, activeEmployeeId = 1;
 let activeTemplate = 'regular';
 let managerScheduleView = 'draft';
 
@@ -64,12 +64,45 @@ let shiftRequests = [
 ];
 let nextShiftRequestId = 3;
 
-let assignments = buildInitialAssignments();
-let publishedAssignments = cloneSchedule(assignments);
-let publishedManagersByDay = cloneSchedule(managersByDay);
-let lastPublishedLabel = 'Not published yet';
+let selectedWeekStart = getMonday(new Date());
+let schedulesByWeek = {};
 
 function cloneSchedule(obj){ return JSON.parse(JSON.stringify(obj)); }
+
+function getMonday(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  d.setHours(0,0,0,0);
+  return d;
+}
+
+function weekKey(date) {
+  return getMonday(date).toISOString().slice(0,10);
+}
+
+function getCurrentWeekKey() {
+  return weekKey(new Date());
+}
+
+function getNextWeekKey() {
+  const d = getMonday(new Date());
+  d.setDate(d.getDate() + 7);
+  return weekKey(d);
+}
+
+function ensureSchedule(key) {
+  if (!schedulesByWeek[key]) {
+    schedulesByWeek[key] = {
+      draftAssignments: buildInitialAssignments(),
+      draftManagers: cloneSchedule(managersByDay),
+      publishedAssignments: null,
+      publishedManagers: null,
+      publishedAt: null
+    };
+  }
+  return schedulesByWeek[key];
+}
 
 function getStaffIdsForRole(roleName){
   if(roleName==='Server') return SERVER_IDS;
@@ -96,11 +129,27 @@ function buildInitialAssignments(){
 }
 
 function getWeekDays() {
-  const today = new Date();
-  const dow = today.getDay();
-  const mon = new Date(today);
-  mon.setDate(today.getDate() - (dow===0?6:dow-1) + weekOffset*7);
-  return Array.from({length:7},(_,i)=>{ const d=new Date(mon); d.setDate(mon.getDate()+i); return d; });
+  const mon = new Date(selectedWeekStart);
+  return Array.from({length:7},(_,i)=>{
+    const d = new Date(mon);
+    d.setDate(mon.getDate()+i);
+    return d;
+  });
+}
+
+function selectWeek(type) {
+  if (type === 'current') selectedWeekStart = getMonday(new Date());
+  if (type === 'next') {
+    selectedWeekStart = getMonday(new Date());
+    selectedWeekStart.setDate(selectedWeekStart.getDate() + 7);
+  }
+  render();
+}
+
+function pickWeekDate(value) {
+  if (!value) return;
+  selectedWeekStart = getMonday(new Date(value + 'T00:00:00'));
+  render();
 }
 function isToday(d) { const t=new Date(); return d.getDate()===t.getDate()&&d.getMonth()===t.getMonth()&&d.getFullYear()===t.getFullYear(); }
 function fmt(d) { return d.toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
@@ -135,7 +184,10 @@ function renderUserChip(){
   chip.innerHTML = `<div><strong>${name}</strong><span>${role==='manager'?'Manager view':userRole+' view'}</span></div><button class="btn-secondary" onclick="logout()"><i class="ti ti-logout"></i> Log out</button>`;
 }
 
-function changeWeek(dir) { weekOffset+=dir; render(); }
+function changeWeek(dir){
+  selectedWeekStart.setDate(selectedWeekStart.getDate() + (dir * 7));
+  render();
+}
 function setRole(r) {
   role=r; activeTab='schedule'; upcomingPage=0;
   const bm=document.getElementById('btn-manager'), be=document.getElementById('btn-employee');
@@ -248,29 +300,70 @@ function renderManagerScheduleView(days){
   return renderSchedule(days, true, managerScheduleView);
 }
 function renderModeToggle(view){
+  const key = weekKey(selectedWeekStart);
+  const week = ensureSchedule(key);
+  const isPublished = !!week.publishedAssignments;
   const isDraft = view === 'draft';
+
   return `<div class="schedule-status">
-    <div><div class="status-title"><i class="ti ${isDraft?'ti-pencil':'ti-checkup-list'}"></i>${isDraft?'Creating upcoming schedule':'Current published schedule'} <span class="${isDraft?'status-badge-draft':'status-badge-published'}">${isDraft?'Draft':'Published'}</span></div>
-    <div class="status-copy">${isDraft?'Make changes here before staff sees the new week.':'This is the schedule employees should treat as current. Last published: '+lastPublishedLabel}</div></div>
-    <div class="template-group"><button class="pill-btn ${managerScheduleView==='current'?'active':''}" onclick="setManagerScheduleView('current')">Current schedule</button><button class="pill-btn ${managerScheduleView==='draft'?'active':''}" onclick="setManagerScheduleView('draft')">New upcoming schedule</button></div>
+    <div>
+      <div class="status-title">
+        <i class="ti ${isPublished?'ti-check':'ti-pencil'}"></i>
+        ${fmt(getWeekDays()[0])} – ${fmt(getWeekDays()[6])}
+        <span class="${isPublished?'status-badge-published':'status-badge-draft'}">
+          ${isPublished?'Published':'Draft'}
+        </span>
+      </div>
+      <div class="status-copy">
+        ${isPublished ? 'This week has been published.' : 'This week is still unpublished.'}
+      </div>
+    </div>
+
+    <div class="template-group">
+      <button class="pill-btn" onclick="selectWeek('current')">Current week</button>
+      <button class="pill-btn" onclick="selectWeek('next')">Next week</button>
+      <input type="date" onchange="pickWeekDate(this.value)">
+    </div>
   </div>
-  <div class="template-bar"><div class="template-group"><span class="template-label">Schedule type</span>
-    <button class="pill-btn ${scheduleMode==='regular'?'active':''}" ${isDraft?'': 'disabled'} onclick="setMode('regular')">Regular</button>
-    <button class="pill-btn ${scheduleMode==='patio'?'active':''}" ${isDraft?'': 'disabled'} onclick="setMode('patio')">Patio season</button>
-    <button class="pill-btn ${scheduleMode==='blank'?'active':''}" ${isDraft?'': 'disabled'} onclick="setMode('blank')">Blank schedule</button>
-  </div><div class="manager-tools">${isDraft?`<button class="btn-save" onclick="autoGenerateSchedule()"><i class="ti ti-wand"></i> Auto-generate draft</button><button class="btn-save" onclick="publishSchedule()"><i class="ti ti-upload"></i> Publish schedule</button>`:''}<button class="btn-secondary" onclick="exportCSV()"><i class="ti ti-download"></i> Export CSV</button></div><div class="summary-line">Servers use 4pm / 5pm. Bartenders use 3:30pm / 5pm. Support staff varies by role.</div></div>`;
+
+  <div class="template-bar">
+    <div class="template-group">
+      <span class="template-label">Schedule type</span>
+      <button class="pill-btn ${scheduleMode==='regular'?'active':''}" ${isDraft?'':'disabled'} onclick="setMode('regular')">Regular</button>
+      <button class="pill-btn ${scheduleMode==='patio'?'active':''}" ${isDraft?'':'disabled'} onclick="setMode('patio')">Patio season</button>
+      <button class="pill-btn ${scheduleMode==='blank'?'active':''}" ${isDraft?'':'disabled'} onclick="setMode('blank')">Blank schedule</button>
+    </div>
+
+    <div class="manager-tools">
+      ${isDraft ? `
+        <button class="btn-save" onclick="autoGenerateSchedule()"><i class="ti ti-wand"></i> Auto-generate draft</button>
+        <button class="btn-save" onclick="publishSchedule()"><i class="ti ti-upload"></i> Publish this week</button>
+      ` : ''}
+      <button class="btn-secondary" onclick="exportCSV()"><i class="ti ti-download"></i> Export CSV</button>
+    </div>
+  </div>`;
 }
 function renderSchedule(days, isMgr, view='published') {
   const keyPrefix = scheduleMode;
-  const source = (isMgr && view==='draft') ? assignments : publishedAssignments;
-  const managerSource = (isMgr && view==='draft') ? managersByDay : publishedManagersByDay;
-  const editable = isMgr && view==='draft';
+  const editable = isMgr && view === 'draft';
+
+  const key = weekKey(selectedWeekStart);
+  const week = ensureSchedule(key);
+
+  const source = editable
+    ? week.draftAssignments
+    : (week.publishedAssignments || {});
+
+  const managerSource = editable
+    ? week.draftManagers
+    : (week.publishedManagers || {});
   let h = `<div class="schedule-wrap">${isMgr?renderModeToggle(view):''}`;
   h += `<div class="day-headers"><div></div>` + days.map((d,i)=>`<div class="day-header${isToday(d)?' today':''}">${DAYS[i]}<span class="num">${d.getDate()}</span></div>`).join('')+`</div>`;
   h += `<div class="manager-strip"><div class="manager-label">Manager on duty</div>` + days.map((d,i)=>{
-    const m=managerSource[i], s=staffById(m.staffId);
+    const m = managerSource[i] || { staffId: null, time: '' };
+    const s = staffById(m.staffId);
     return `<div class="manager-cell" ${editable?`onclick="editManager(${i})" title="Click to edit manager"`:''}>
-      <div class="manager-name">${s?s.name:'Unassigned'}</div><div class="manager-time">${m.time} start</div></div>`;
+      <div class="manager-name">${s?s.name:'Unassigned'}</div><div class="manager-time">${m.time ? m.time + ' start' : ''}</div></div>`;
   }).join('') + `</div>`;
   h += `<div class="slot-grid">`;
   for(let d=0; d<7; d++){
@@ -309,12 +402,17 @@ function renderTemplates(days){
     <button class="pill-btn ${activeTemplate==='patio'?'active':''}" onclick="setManagerTemplate('patio')">Patio</button>
     <button class="pill-btn ${activeTemplate==='managerRegular'?'active':''}" onclick="setManagerTemplate('managerRegular')">Blank regular</button>
   </div><div class="summary-line">Use these as starting patterns, then assign names as needed.</div></div>`;
-  const oldMode = scheduleMode;
   let mode = activeTemplate==='patio'?'patio':'regular';
   let h=`<div class="schedule-wrap">${tabs}<div class="slot-grid">`;
   for(let d=0; d<7; d++){
-    const slots = assignments[`${activeTemplate}-${d}`] || getSlotsForDay(mode,d).map(s=>({...s,staffId:null}));
-    h += `<div class="template-day-card"><div class="template-day-title"><span>${LONG_DAYS[d]}</span></div>`;
+  const slots =
+    week.draftAssignments[`${activeTemplate}-${d}`] ||
+    getSlotsForDay(mode,d).map(s=>({...s,staffId:null}));
+
+  h += `<div class="template-day-card">
+    <div class="template-day-title">
+      <span>${LONG_DAYS[d]}</span>
+    </div>`;
     slots.forEach((slot,i)=>{
       const s=staffById(slot.staffId); const cls=slot.special?'special':slot.oncall?'oncall':slot.patio?'patio':'filled';
       h += `<div class="slot ${cls}" onclick="editSlot('${activeTemplate}',${d},${i})"><div class="slot-area">${slot.area}</div><div class="slot-main">${s?s.name:'Open slot'}</div><div class="slot-time">${slot.time}${slot.oncall?' · on call':''}${slot.patio?' · patio':''}${slot.special?' · special event':''}</div></div>`;
@@ -326,13 +424,28 @@ function renderTemplates(days){
 }
 
 function editManager(dayIdx){
-  const m=managersByDay[dayIdx];
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+
+  const m = week.draftManagers[dayIdx] || {
+    staffId: 6,
+    time: '1pm'
+  };
   showModal(`<div class="modal-title">Manager on duty — ${LONG_DAYS[dayIdx]}</div>
     <div class="fgroup"><label class="flabel">Manager</label><select id="m-manager">${MANAGER_IDS.map(id=>{const s=staffById(id); return `<option value="${id}"${id===m.staffId?' selected':''}>${s.name}</option>`}).join('')}</select></div>
     <div class="fgroup"><label class="flabel">Start time</label><select id="m-time"><option${m.time==='1pm'?' selected':''}>1pm</option><option${m.time==='4pm'?' selected':''}>4pm</option></select></div>
     <div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-save" onclick="saveManager(${dayIdx})"><i class="ti ti-check"></i> Save</button></div>`);
 }
-function saveManager(dayIdx){ managersByDay[dayIdx]={staffId:+document.getElementById('m-manager').value,time:document.getElementById('m-time').value}; closeModal(); render(); }
+function saveManager(dayIdx){
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+
+  week.draftManagers[dayIdx] = {
+    staffId: +document.getElementById('m-manager').value,
+    time: document.getElementById('m-time').value
+  };
+
+  closeModal();
+  render();
+}
 function slotTag(slot){
   if(slot.special) return 'special';
   if(slot.oncall) return 'oncall';
@@ -340,12 +453,30 @@ function slotTag(slot){
   return 'none';
 }
 function editSlot(prefix, dayIdx, slotIdx){
-  const slot=assignments[`${prefix}-${dayIdx}`][slotIdx];
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+  const slot = week.draftAssignments[`${prefix}-${dayIdx}`][slotIdx];
+
   showSlotModal(prefix, dayIdx, slotIdx, slot, false);
 }
+
 function addSlot(prefix, dayIdx){
-  if(!assignments[`${prefix}-${dayIdx}`]) assignments[`${prefix}-${dayIdx}`] = [];
-  showSlotModal(prefix, dayIdx, null, {area:'Server', time:'4pm', staffId:null}, true);
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+
+  if(!week.draftAssignments[`${prefix}-${dayIdx}`]) {
+    week.draftAssignments[`${prefix}-${dayIdx}`] = [];
+  }
+
+  showSlotModal(
+    prefix,
+    dayIdx,
+    null,
+    {
+      area:'Server',
+      time:'4pm',
+      staffId:null
+    },
+    true
+  );
 }
 function showSlotModal(prefix, dayIdx, slotIdx, slot, isNew){
   showModal(`<div class="modal-title">${isNew?'Add':'Edit'} shift — ${LONG_DAYS[dayIdx]}</div>
@@ -376,10 +507,31 @@ function readSlotForm(){
     special: tag==='special'
   };
 }
-function saveNewSlot(prefix, dayIdx){ assignments[`${prefix}-${dayIdx}`].push(readSlotForm()); closeModal(); render(); }
-function updateSlotDetails(prefix, dayIdx, slotIdx){ assignments[`${prefix}-${dayIdx}`][slotIdx]=readSlotForm(); closeModal(); render(); }
-function removeSlot(prefix, dayIdx, slotIdx){ assignments[`${prefix}-${dayIdx}`].splice(slotIdx,1); closeModal(); render(); }
+function saveNewSlot(prefix, dayIdx){
+  const week = ensureSchedule(weekKey(selectedWeekStart));
 
+  week.draftAssignments[`${prefix}-${dayIdx}`].push(readSlotForm());
+
+  closeModal();
+  render();
+}
+function updateSlotDetails(prefix, dayIdx, slotIdx){
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+
+  week.draftAssignments[`${prefix}-${dayIdx}`][slotIdx] = readSlotForm();
+
+  closeModal();
+  render();
+}
+
+function removeSlot(prefix, dayIdx, slotIdx){
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+
+  week.draftAssignments[`${prefix}-${dayIdx}`].splice(slotIdx,1);
+
+  closeModal();
+  render();
+}
 function isAvailable(staffId, dayIdx, slot){
   const a = availability[staffId] && availability[staffId][dayIdx];
   if(!a) return false;
@@ -391,49 +543,100 @@ function isAvailable(staffId, dayIdx, slot){
 }
 function autoGenerateSchedule(){
   const keyPrefix = scheduleMode;
+  const week = ensureSchedule(weekKey(selectedWeekStart));
   const usedCounts = Object.fromEntries(EMPLOYEE_IDS.map(id=>[id,0]));
+
   for(let d=0; d<7; d++){
     const usedToday = new Set();
     const slots = getSlotsForDay(keyPrefix,d).map(slot=>({...slot, staffId:null}));
+
     slots.forEach(slot=>{
       const candidates = getStaffIdsForRole(slot.role || 'Server')
         .filter(id=>!usedToday.has(id) && isAvailable(id,d,slot))
         .sort((a,b)=>usedCounts[a]-usedCounts[b] || a-b);
+
       if(candidates.length){
         slot.staffId = candidates[0];
         usedToday.add(candidates[0]);
         usedCounts[candidates[0]]++;
       }
     });
-    assignments[`${keyPrefix}-${d}`] = slots;
+
+    week.draftAssignments[`${keyPrefix}-${d}`] = slots;
   }
+
   render();
 }
 function publishSchedule(){
-  publishedAssignments = cloneSchedule(assignments);
-  publishedManagersByDay = cloneSchedule(managersByDay);
-  lastPublishedLabel = new Date().toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
-  managerScheduleView = 'current';
+  const key = weekKey(selectedWeekStart);
+  const week = ensureSchedule(key);
+
+  week.publishedAssignments = cloneSchedule(week.draftAssignments);
+  week.publishedManagers = cloneSchedule(week.draftManagers);
+  week.publishedAt = new Date().toLocaleString('en-US',{
+    month:'short',
+    day:'numeric',
+    hour:'numeric',
+    minute:'2-digit'
+  });
+
+  managerScheduleView = 'published';
   render();
 }
 function csvEscape(v){ return `"${String(v ?? '').replaceAll('"','""')}"`; }
+function roleGroup(role){
+  if(role === 'Server') return 'Servers';
+  if(role === 'Bartender') return 'Bar';
+  if(['Busser','Barback','FoodRunner'].includes(role)) return 'Support Staff';
+  return 'Other';
+}
+
 function exportCSV(){
-  const days=getWeekDays();
-  const source = managerScheduleView==='draft' ? assignments : publishedAssignments;
-  const managerSource = managerScheduleView==='draft' ? managersByDay : publishedManagersByDay;
-  const rows=[['Date','Day','Schedule View','Type','Job Role','Area','Time','Employee','Employee Role','Manager on Duty','Manager Start','Status']];
-  for(let d=0; d<7; d++){
-    const m=managerSource[d], mgr=staffById(m.staffId);
-    (source[`${scheduleMode}-${d}`]||[]).forEach(slot=>{
-      const emp=staffById(slot.staffId);
-      rows.push([fmt(days[d]),LONG_DAYS[d],managerScheduleView,scheduleMode,slot.role||'Server',slot.area,slot.time+(slot.oncall?' on call':'')+(slot.patio?' patio':'')+(slot.special?' special event':''),emp?emp.name:'Unassigned',emp?emp.role:'',mgr?mgr.name:'Unassigned',m.time,slot.staffId && !isAvailable(slot.staffId,d,slot)?'Not available':'']);
+  const days = getWeekDays();
+  const key = weekKey(selectedWeekStart);
+  const week = ensureSchedule(key);
+
+  const source = managerScheduleView === 'draft'
+    ? week.draftAssignments
+    : (week.publishedAssignments || {});
+
+  const rows = [['Date','Day','Group','Role','Area','Time','Employee']];
+
+  for(let d = 0; d < 7; d++){
+    const slots = source[`${scheduleMode}-${d}`] || [];
+
+    const sortedSlots = [...slots].sort((a,b)=>{
+      const order = {'Servers':1, 'Support Staff':2, 'Bar':3, 'Other':4};
+      return order[roleGroup(a.role)] - order[roleGroup(b.role)];
+    });
+
+    sortedSlots.forEach(slot=>{
+      const emp = staffById(slot.staffId);
+
+      rows.push([
+        fmt(days[d]),
+        LONG_DAYS[d],
+        roleGroup(slot.role || 'Server'),
+        slot.role || 'Server',
+        slot.area,
+        slot.time,
+        emp ? emp.name : 'Unassigned'
+      ]);
     });
   }
-  const csv=rows.map(r=>r.map(csvEscape).join(',')).join('\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a'); a.href=url; a.download=`${managerScheduleView}-${scheduleMode}-schedule-${fmt(days[0]).replace(' ','-')}.csv`; a.click(); URL.revokeObjectURL(url);
+
+  const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `schedule-${fmt(days[0]).replace(' ','-')}-to-${fmt(days[6]).replace(' ','-')}.csv`;
+  a.click();
+
+  URL.revokeObjectURL(url);
 }
+
 function renderAvailabilityForm(){
   const staffId=activeEmployeeId;
   let h=`<div class="emp-view"><div class="sub-head"><i class="ti ti-user-check"></i> My availability</div><div class="availability-note" style="margin-bottom:12px">Servers only need to mark whether they can work the 4pm or 5pm shift. On-call coverage uses the 5pm availability.</div><div class="availability-grid">`;
@@ -458,7 +661,9 @@ function renderAvailabilityOverview(){
 }
 
 function findSlot(mode, day, slotIdx){
-  return publishedAssignments[`${mode}-${day}`] && publishedAssignments[`${mode}-${day}`][slotIdx];
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+
+  return week.publishedAssignments?.[`${mode}-${day}`]?.[slotIdx];
 }
 function shiftStartDate(dayIdx, time){
   const days=getWeekDays();
@@ -504,13 +709,16 @@ function shiftReqCard(r, actions){
 function getAvailableShifts(){
   const open = [];
   const mode = scheduleMode;
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+  const published = week.publishedAssignments || {};
+
   for(let d=0; d<7; d++){
-    (publishedAssignments[`${mode}-${d}`]||[]).forEach((slot, slotIdx)=>{
+    (published[`${mode}-${d}`] || []).forEach((slot, slotIdx)=>{
       const isGivenUp = shiftRequests.some(r =>
         r.type === 'giveup' && r.status === 'pending' &&
         r.mode === mode && r.day === d && r.slotIdx === slotIdx
       );
-      // show open slots OR pending give-ups (but not to the person giving it up)
+
       if(
         (!slot.staffId || isGivenUp) &&
         slot.staffId !== activeEmployeeId &&
@@ -520,6 +728,7 @@ function getAvailableShifts(){
       }
     });
   }
+
   return open;
 }
 function hasPendingClaim(mode, day, slotIdx, staffId){
@@ -555,52 +764,116 @@ function renderEmployeeRequests(days) {
 }
 
 function renderEmployeeView(days) {
-  const myShifts=[];
+  const myShifts = [];
   const mode = scheduleMode;
-  for(let d=0; d<7; d++){
-    (publishedAssignments[`${mode}-${d}`]||[]).forEach((slot,slotIdx)=>{
-      if(slot.staffId===activeEmployeeId) myShifts.push({day:d,mode,slotIdx,...slot});
+
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+  const published = week.publishedAssignments || {};
+
+  for(let d = 0; d < 7; d++){
+    (published[`${mode}-${d}`] || []).forEach((slot, slotIdx)=>{
+      if(slot.staffId === activeEmployeeId) {
+        myShifts.push({day:d, mode, slotIdx, ...slot});
+      }
     });
   }
+
   myShifts.sort((a,b)=> a.day-b.day || String(a.time).localeCompare(String(b.time)));
 
   const pageSize = 5;
   const totalPages = Math.max(1, Math.ceil(myShifts.length / pageSize));
   if(upcomingPage >= totalPages) upcomingPage = totalPages - 1;
+
   const pageStart = upcomingPage * pageSize;
   const visibleShifts = myShifts.slice(pageStart, pageStart + pageSize);
 
   const activeUser = staffById(activeEmployeeId);
-  let h = `<div class="employee-schedule-view"><div class="emp-view compact-panel"><div class="job-type-note"><strong>${activeUser ? activeUser.name : 'Employee'}</strong> · ${activeUser ? activeUser.role : ''} schedule. Employees only see shifts for their own job type.</div></div>`;
+
+  let h = `<div class="employee-schedule-view">
+    <div class="emp-view compact-panel">
+      <div class="job-type-note">
+        <strong>${activeUser ? activeUser.name : 'Employee'}</strong> · ${activeUser ? activeUser.role : ''} schedule.
+        Employees only see shifts for their own job type.
+      </div>
+    </div>`;
+
   h += renderSchedule(days, false);
 
-  h += `<div class="emp-view compact-panel"><div class="sub-head"><i class="ti ti-clock"></i> My upcoming shifts <span class="summary-line">Showing ${myShifts.length ? pageStart+1 : 0}-${Math.min(pageStart+pageSize,myShifts.length)} of ${myShifts.length}</span></div>`;
+  h += `<div class="emp-view compact-panel">
+    <div class="sub-head">
+      <i class="ti ti-clock"></i> My upcoming shifts
+      <span class="summary-line">
+        Showing ${myShifts.length ? pageStart+1 : 0}-${Math.min(pageStart+pageSize,myShifts.length)} of ${myShifts.length}
+      </span>
+    </div>`;
+
   if(!myShifts.length){
-    h += `<div class="empty-state" style="padding:20px"><i class="ti ti-calendar"></i>No shifts scheduled this week</div>`;
+    h += `<div class="empty-state" style="padding:20px">
+      <i class="ti ti-calendar"></i>No shifts scheduled this week
+    </div>`;
   } else {
     visibleShifts.forEach(v=>{
-      const locked=!canRequestChange(v.day,v.time);
-      const pendingGiveUp=hasPendingGiveUp(v.mode,v.day,v.slotIdx,activeEmployeeId);
+      const locked = !canRequestChange(v.day, v.time);
+      const pendingGiveUp = hasPendingGiveUp(v.mode, v.day, v.slotIdx, activeEmployeeId);
+
       const actions = locked
         ? ''
         : pendingGiveUp
           ? '<span class="status-badge spe">Give-up pending</span>'
-          : `<button class="btn-secondary" onclick="requestGiveUp('${v.mode}',${v.day},${v.slotIdx})">Give up</button><button class="btn-secondary" onclick="openSwapModal('${v.mode}',${v.day},${v.slotIdx})">Swap</button>`;
-      h += `<div class="my-shift-card"><span class="sdot" style="background:#378ADD"></span><div class="my-shift-info"><div class="day">${DAYS[v.day]}, ${fmt(days[v.day])}</div><div class="time">${v.time} · ${v.area}${v.oncall?' · on call':''}${v.patio?' · patio':''}${v.special?' · special event':''} · ${v.mode}</div>${locked?'<div class="locked-note">Changes locked within 4 hours of start time.</div>':''}${pendingGiveUp?'<div class="req-meta">Waiting for manager approval before this shift is released.</div>':''}</div><div class="shift-actions">${actions}</div></div>`;
+          : `<button class="btn-secondary" onclick="requestGiveUp('${v.mode}',${v.day},${v.slotIdx})">Give up</button>
+             <button class="btn-secondary" onclick="openSwapModal('${v.mode}',${v.day},${v.slotIdx})">Swap</button>`;
+
+      h += `<div class="my-shift-card">
+        <span class="sdot" style="background:#378ADD"></span>
+        <div class="my-shift-info">
+          <div class="day">${DAYS[v.day]}, ${fmt(days[v.day])}</div>
+          <div class="time">${v.time} · ${v.area}${v.oncall?' · on call':''}${v.patio?' · patio':''}${v.special?' · special event':''} · ${v.mode}</div>
+          ${locked ? '<div class="locked-note">Changes locked within 4 hours of start time.</div>' : ''}
+          ${pendingGiveUp ? '<div class="req-meta">Waiting for manager approval before this shift is released.</div>' : ''}
+        </div>
+        <div class="shift-actions">${actions}</div>
+      </div>`;
     });
+
     if(totalPages > 1){
-      h += `<div class="pager"><button class="btn-secondary" ${upcomingPage===0?'disabled':''} onclick="changeUpcomingPage(-1)"><i class="ti ti-chevron-left"></i> Previous</button><span class="pager-label">Page ${upcomingPage+1} of ${totalPages}</span><button class="btn-secondary" ${upcomingPage>=totalPages-1?'disabled':''} onclick="changeUpcomingPage(1)">Next <i class="ti ti-chevron-right"></i></button></div>`;
+      h += `<div class="pager">
+        <button class="btn-secondary" ${upcomingPage===0?'disabled':''} onclick="changeUpcomingPage(-1)">
+          <i class="ti ti-chevron-left"></i> Previous
+        </button>
+        <span class="pager-label">Page ${upcomingPage+1} of ${totalPages}</span>
+        <button class="btn-secondary" ${upcomingPage>=totalPages-1?'disabled':''} onclick="changeUpcomingPage(1)">
+          Next <i class="ti ti-chevron-right"></i>
+        </button>
+      </div>`;
     }
   }
+
   h += `</div>`;
 
   const minePending = myPendingShiftRequests();
+
   if(minePending.length){
-    h += `<div class="emp-view compact-panel"><div class="sub-head"><i class="ti ti-hourglass"></i> My pending shift requests</div>`;
+    h += `<div class="emp-view compact-panel">
+      <div class="sub-head"><i class="ti ti-hourglass"></i> My pending shift requests</div>`;
+
     minePending.forEach(r=>{
-      const label = r.type==='giveup' ? 'Give-up request' : r.type==='swap' ? 'Swap request' : 'Claim request';
-      h += `<div class="my-shift-card"><span class="sdot" style="background:#FAC775"></span><div class="my-shift-info"><div class="day">${label}</div><div class="time">${shiftLabel(r.mode,r.day,r.slotIdx)}</div><div class="req-meta">Waiting for manager approval.</div></div><span class="status-badge spe">Pending</span></div>`;
+      const label = r.type === 'giveup'
+        ? 'Give-up request'
+        : r.type === 'swap'
+          ? 'Swap request'
+          : 'Claim request';
+
+      h += `<div class="my-shift-card">
+        <span class="sdot" style="background:#FAC775"></span>
+        <div class="my-shift-info">
+          <div class="day">${label}</div>
+          <div class="time">${shiftLabel(r.mode,r.day,r.slotIdx)}</div>
+          <div class="req-meta">Waiting for manager approval.</div>
+        </div>
+        <span class="status-badge spe">Pending</span>
+      </div>`;
     });
+
     h += `</div>`;
   }
 
@@ -608,30 +881,63 @@ function renderEmployeeView(days) {
 
   return h + `</div>`;
 }
-function changeUpcomingPage(dir){ upcomingPage = Math.max(0, upcomingPage + dir); render(); }
-function resolve(id,status){ requests.find(r=>r.id===id).status=status; render(); }
+
+function changeUpcomingPage(dir){
+  upcomingPage = Math.max(0, upcomingPage + dir);
+  render();
+}
+
+function resolve(id,status){
+  requests.find(r=>r.id===id).status=status;
+  render();
+}
+
 function resolveShiftRequest(id, status){
-  const r = shiftRequests.find(r => r.id === id); if(!r) return;
+  const r = shiftRequests.find(r => r.id === id);
+  if(!r) return;
+
   const slot = findSlot(r.mode, r.day, r.slotIdx);
+
   if(status === 'approved'){
-    if(!slot || !canRequestChange(r.day, slot.time)){ alert('This shift is locked because it starts in less than 4 hours.'); return; }
-    if(r.type === 'giveup') slot.staffId = null;
+    if(!slot || !canRequestChange(r.day, slot.time)){
+      alert('This shift is locked because it starts in less than 4 hours.');
+      return;
+    }
+
+    if(r.type === 'giveup') {
+      slot.staffId = null;
+    }
+
     if(r.type === 'swap'){
       const target = findSlot(r.targetMode, r.targetDay, r.targetSlotIdx);
-      if(!target || !canRequestChange(r.targetDay, target.time)){ alert('One of these shifts is locked because it starts in less than 4 hours.'); return; }
-      const temp = slot.staffId; slot.staffId = target.staffId; target.staffId = temp;
+
+      if(!target || !canRequestChange(r.targetDay, target.time)){
+        alert('One of these shifts is locked because it starts in less than 4 hours.');
+        return;
+      }
+
+      const temp = slot.staffId;
+      slot.staffId = target.staffId;
+      target.staffId = temp;
     }
+
     if(r.type === 'claim'){
-      if(!slot){ alert('Shift not found.'); return; }
       slot.staffId = r.staffId;
+
       const giveup = shiftRequests.find(g =>
-        g.type === 'giveup' && g.status === 'pending' &&
-        g.mode === r.mode && g.day === r.day && g.slotIdx === r.slotIdx
+        g.type === 'giveup' &&
+        g.status === 'pending' &&
+        g.mode === r.mode &&
+        g.day === r.day &&
+        g.slotIdx === r.slotIdx
       );
+
       if(giveup) giveup.status = 'approved';
     }
   }
-  r.status = status; render();
+
+  r.status = status;
+  render();
 }
 function todayLabel(){ return new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
 function requestGiveUp(mode,day,slotIdx){
@@ -645,11 +951,36 @@ function requestGiveUp(mode,day,slotIdx){
   render();
 }
 function openSwapModal(mode,day,slotIdx){
-  const slot=findSlot(mode,day,slotIdx);
-  if(!slot || !canRequestChange(day,slot.time)){ alert('This shift cannot be swapped within 4 hours of the start time.'); return; }
-  const options=[];
-  ['regular','patio','blank'].forEach(m=>{ for(let d=0;d<7;d++){ (publishedAssignments[`${m}-${d}`]||[]).forEach((other,i)=>{ if(other.staffId && other.staffId!==activeEmployeeId && canRequestChange(d,other.time)) options.push({m,d,i,other}); }); }});
-  showModal(`<div class="modal-title">Request shift swap</div><div class="availability-note" style="margin-bottom:12px">Swap requests must be approved by a manager. Shifts within 4 hours of start time are not eligible.</div><div class="fgroup"><label class="flabel">Your shift</label><input type="text" value="${shiftLabel(mode,day,slotIdx)}" disabled /></div><div class="fgroup"><label class="flabel">Swap with</label><select id="swap-target">${options.map(o=>`<option value="${o.m}|${o.d}|${o.i}">${staffById(o.other.staffId).name} — ${shiftLabel(o.m,o.d,o.i)}</option>`).join('')}</select></div><div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">Cancel</button><button class="btn-save" onclick="submitSwapRequest('${mode}',${day},${slotIdx})"><i class="ti ti-send"></i> Submit swap</button></div>`);
+  const slot = findSlot(mode,day,slotIdx);
+
+  if(!slot || !canRequestChange(day,slot.time)){
+    alert('This shift cannot be swapped within 4 hours of the start time.');
+    return;
+  }
+
+  const options = [];
+
+  const week = ensureSchedule(weekKey(selectedWeekStart));
+  const published = week.publishedAssignments || {};
+
+  ['regular','patio','blank'].forEach(m=>{
+    for(let d=0; d<7; d++){
+      (published[`${m}-${d}`] || []).forEach((other,i)=>{
+        if(other.staffId && other.staffId !== activeEmployeeId && canRequestChange(d,other.time)){
+          options.push({m,d,i,other});
+        }
+      });
+    }
+  });
+
+  showModal(`<div class="modal-title">Request shift swap</div>
+    <div class="availability-note" style="margin-bottom:12px">Swap requests must be approved by a manager. Shifts within 4 hours of start time are not eligible.</div>
+    <div class="fgroup"><label class="flabel">Your shift</label><input type="text" value="${shiftLabel(mode,day,slotIdx)}" disabled /></div>
+    <div class="fgroup"><label class="flabel">Swap with</label><select id="swap-target">${options.map(o=>`<option value="${o.m}|${o.d}|${o.i}">${staffById(o.other.staffId).name} — ${shiftLabel(o.m,o.d,o.i)}</option>`).join('')}</select></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="submitSwapRequest('${mode}',${day},${slotIdx})"><i class="ti ti-send"></i> Submit swap</button>
+    </div>`);
 }
 function submitSwapRequest(mode,day,slotIdx){
   const val=document.getElementById('swap-target').value;
@@ -679,7 +1010,8 @@ function showModal(content){ closeModal(); const ov=document.createElement('div'
 function closeModal(){ const m=document.getElementById('modal-ov'); if(m) m.remove(); }
 populateLogin();
 
-
+window.selectWeek = selectWeek;
+window.pickWeekDate = pickWeekDate;
 window.requestGiveUp = requestGiveUp;
 window.openSwapModal = openSwapModal;
 window.claimShift = claimShift;
