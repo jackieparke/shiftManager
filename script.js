@@ -76,7 +76,27 @@ function getMonday(date) {
   d.setHours(0,0,0,0);
   return d;
 }
+function selectedWeekRangeLabel(){
+  const days = getWeekDays();
+  return `${fmt(days[0])} – ${fmt(days[6])}`;
+}
+function nextWeekRangeLabel(){
+  const mon = getMonday(new Date());
+  mon.setDate(mon.getDate() + 7);
 
+  const sun = new Date(mon);
+  sun.setDate(mon.getDate() + 6);
+
+  return `${fmt(mon)} – ${fmt(sun)}`;
+}
+function isSameWeekKey(type){
+  const selected = weekKey(selectedWeekStart);
+
+  if(type === 'current') return selected === getCurrentWeekKey();
+  if(type === 'next') return selected === getNextWeekKey();
+
+  return false;
+}
 function weekKey(date) {
   return getMonday(date).toISOString().slice(0,10);
 }
@@ -322,7 +342,7 @@ function renderModeToggle(view){
     <div>
       <div class="status-title">
         <i class="ti ${isPublished?'ti-check':'ti-pencil'}"></i>
-        ${fmt(getWeekDays()[0])} – ${fmt(getWeekDays()[6])}
+        ${selectedWeekRangeLabel()}
         <span class="${isPublished?'status-badge-published':'status-badge-draft'}">
           ${isPublished?'Published':'Draft'}
         </span>
@@ -333,10 +353,15 @@ function renderModeToggle(view){
     </div>
 
     <div class="template-group">
-      <<button class="pill-btn" onclick="selectWeek('current')">
-    Current schedule (${currentWeekRangeLabel()})
-</button>
-      <button class="pill-btn" onclick="selectWeek('next')">Next week</button>
+      <button class="pill-btn ${isSameWeekKey('current') ? 'active' : ''}" onclick="selectWeek('current')">
+        Current schedule (${currentWeekRangeLabel()})
+      </button>
+
+      <button class="pill-btn ${isSameWeekKey('next') ? 'active' : ''}" onclick="selectWeek('next')">
+        Next week (${nextWeekRangeLabel()})
+      </button>
+
+      <div class="picked-week-label">Selected week: ${selectedWeekRangeLabel()}</div>
       <input type="date" onchange="pickWeekDate(this.value)">
     </div>
   </div>
