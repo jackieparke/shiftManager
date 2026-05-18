@@ -654,3 +654,30 @@ function submitReq(){ const dates=document.getElementById('emp-dates').value.tri
 function showModal(content){ closeModal(); const ov=document.createElement('div'); ov.className='modal-overlay'; ov.id='modal-ov'; ov.innerHTML=`<div class="modal">${content}</div>`; ov.addEventListener('click',e=>{if(e.target===ov)closeModal();}); document.body.appendChild(ov); }
 function closeModal(){ const m=document.getElementById('modal-ov'); if(m) m.remove(); }
 populateLogin();
+
+
+window.requestGiveUp = requestGiveUp;
+window.openSwapModal = openSwapModal;
+window.claimShift = claimShift;
+window.submitSwapRequest = submitSwapRequest;
+window.submitReq = submitReq;
+window.resolve = resolve;
+window.resolveShiftRequest = resolveShiftRequest;
+window.changeWeek = changeWeek;
+window.setTab = setTab;
+window.setMode = setMode;
+window.setManagerTemplate = setManagerTemplate;
+window.setManagerScheduleView = setManagerScheduleView;
+window.changeUpcomingPage = changeUpcomingPage;
+window.editSlot = editSlot;
+window.addSlot = addSlot;
+window.saveNewSlot = saveNewSlot;
+window.updateSlotDetails = updateSlotDetails;
+window.removeSlot = removeSlot;
+window.editManager = editManager;
+window.saveManager = saveManager;
+window.closeModal = closeModal;
+window.setAvailability = setAvailability;
+window.autoGenerateSchedule = autoGenerateSchedule;
+window.publishSchedule = publishSchedule;
+window.exportCSV = exportCSV;
