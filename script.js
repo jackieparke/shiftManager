@@ -659,11 +659,19 @@ function submitSwapRequest(mode,day,slotIdx){
   shiftRequests.unshift({id:nextShiftRequestId++,type:'swap',status:'pending',staffId:activeEmployeeId,mode,day,slotIdx,targetStaffId:target.staffId,targetMode,targetDay:+targetDay,targetSlotIdx:+targetSlotIdx,submitted:todayLabel()});
   closeModal(); render();
 }
-function claimShift(mode,day,slotIdx){
-  const slot=findSlot(mode,day,slotIdx);
-  if(!slot || slot.staffId){ alert('This shift is no longer available.'); return; }
-  if(hasPendingClaim(mode,day,slotIdx,activeEmployeeId)){ alert('You already requested to claim this shift.'); return; }
-  shiftRequests.unshift({id:nextShiftRequestId++,type:'claim',status:'pending',staffId:activeEmployeeId,mode,day,slotIdx,submitted:todayLabel()});
+function claimShift(mode, day, slotIdx){
+  const slot = findSlot(mode, day, slotIdx);
+  
+  const isGivenUp = shiftRequests.some(r =>
+    r.type === 'giveup' && r.status === 'pending' &&
+    r.mode === mode && r.day === day && r.slotIdx === slotIdx
+  );
+
+  if(!slot){ alert('This shift could not be found.'); return; }
+  if(slot.staffId && !isGivenUp){ alert('This shift is no longer available.'); return; }
+  if(hasPendingClaim(mode, day, slotIdx, activeEmployeeId)){ alert('You already requested to claim this shift.'); return; }
+  
+  shiftRequests.unshift({id:nextShiftRequestId++, type:'claim', status:'pending', staffId:activeEmployeeId, mode, day, slotIdx, submitted:todayLabel()});
   render();
 }
 function submitReq(){ const dates=document.getElementById('emp-dates').value.trim(); const reason=document.getElementById('emp-reason').value.trim(); if(!dates){ alert('Please enter the dates.'); return; } const today=new Date(); requests.unshift({id:nextId++,staffId:activeEmployeeId,name:staffById(activeEmployeeId).name,dates,reason:reason||'No reason given',status:'pending',submitted:today.toLocaleDateString('en-US',{month:'short',day:'numeric'})}); render(); }
