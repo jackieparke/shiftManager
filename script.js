@@ -111,7 +111,7 @@ function populateLogin(){
   if(!sel) return;
   sel.innerHTML = STAFF.map(s=>`<option value="${s.id}">${s.name} — ${s.role}</option>`).join('');
 }
-function login(){
+window.login = function() {
   const selected = +document.getElementById('login-user').value;
   const user = staffById(selected) || STAFF[0];
   activeEmployeeId = user.role === 'Manager' ? activeEmployeeId : user.id;
@@ -122,7 +122,7 @@ function login(){
   document.getElementById('app').style.display = 'flex';
   render();
 }
-window.login = function() {
+window.logout = function() {
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
