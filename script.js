@@ -502,11 +502,22 @@ function shiftReqCard(r, actions){
   return `<div class="req-card"><div class="avatar" style="background:${s.color};color:${s.text}">${s.initials}</div><div class="req-info"><div class="req-name">${type} — ${s.name}</div><div class="req-detail">${shiftLabel(r.mode,r.day,r.slotIdx)}</div>${target}<div class="req-meta">Submitted ${r.submitted}</div>${locked?'<div class="locked-note">Locked: less than 4 hours before shift start.</div>':''}</div>${actions?`<div class="req-actions"><button class="btn-approve" onclick="resolveShiftRequest(${r.id},'approved')"><i class="ti ti-check"></i> Approve</button><button class="btn-deny" onclick="resolveShiftRequest(${r.id},'denied')"><i class="ti ti-x"></i> Deny</button></div>`:`<span class="status-badge ${badge}">${label}</span>`}</div>`;
 }
 function getAvailableShifts(){
-  const open=[];
+  const open = [];
   const mode = scheduleMode;
   for(let d=0; d<7; d++){
-    (publishedAssignments[`${mode}-${d}`]||[]).forEach((slot,slotIdx)=>{
-      if(!slot.staffId && slot.role === staffById(activeEmployeeId).role) open.push({mode,day:d,slotIdx,...slot});
+    (publishedAssignments[`${mode}-${d}`]||[]).forEach((slot, slotIdx)=>{
+      const isGivenUp = shiftRequests.some(r =>
+        r.type === 'giveup' && r.status === 'pending' &&
+        r.mode === mode && r.day === d && r.slotIdx === slotIdx
+      );
+      // show open slots OR pending give-ups (but not to the person giving it up)
+      if(
+        (!slot.staffId || isGivenUp) &&
+        slot.staffId !== activeEmployeeId &&
+        slot.role === staffById(activeEmployeeId)?.role
+      ){
+        open.push({mode, day:d, slotIdx, ...slot, isGivenUp});
+      }
     });
   }
   return open;
@@ -599,23 +610,28 @@ function renderEmployeeView(days) {
 }
 function changeUpcomingPage(dir){ upcomingPage = Math.max(0, upcomingPage + dir); render(); }
 function resolve(id,status){ requests.find(r=>r.id===id).status=status; render(); }
-function resolveShiftRequest(id,status){
-  const r=shiftRequests.find(r=>r.id===id); if(!r) return;
-  const slot=findSlot(r.mode,r.day,r.slotIdx);
-  if(status==='approved'){
-    if(!slot || !canRequestChange(r.day,slot.time)){ alert('This shift is locked because it starts in less than 4 hours.'); return; }
-    if(r.type==='giveup') slot.staffId=null;
-    if(r.type==='swap'){
-      const target=findSlot(r.targetMode,r.targetDay,r.targetSlotIdx);
-      if(!target || !canRequestChange(r.targetDay,target.time)){ alert('One of these shifts is locked because it starts in less than 4 hours.'); return; }
-      const temp=slot.staffId; slot.staffId=target.staffId; target.staffId=temp;
+function resolveShiftRequest(id, status){
+  const r = shiftRequests.find(r => r.id === id); if(!r) return;
+  const slot = findSlot(r.mode, r.day, r.slotIdx);
+  if(status === 'approved'){
+    if(!slot || !canRequestChange(r.day, slot.time)){ alert('This shift is locked because it starts in less than 4 hours.'); return; }
+    if(r.type === 'giveup') slot.staffId = null;
+    if(r.type === 'swap'){
+      const target = findSlot(r.targetMode, r.targetDay, r.targetSlotIdx);
+      if(!target || !canRequestChange(r.targetDay, target.time)){ alert('One of these shifts is locked because it starts in less than 4 hours.'); return; }
+      const temp = slot.staffId; slot.staffId = target.staffId; target.staffId = temp;
     }
-    if(r.type==='claim'){
-      if(!slot || slot.staffId){ alert('This shift is no longer available.'); return; }
-      slot.staffId=r.staffId;
+    if(r.type === 'claim'){
+      if(!slot){ alert('Shift not found.'); return; }
+      slot.staffId = r.staffId;
+      const giveup = shiftRequests.find(g =>
+        g.type === 'giveup' && g.status === 'pending' &&
+        g.mode === r.mode && g.day === r.day && g.slotIdx === r.slotIdx
+      );
+      if(giveup) giveup.status = 'approved';
     }
   }
-  r.status=status; render();
+  r.status = status; render();
 }
 function todayLabel(){ return new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
 function requestGiveUp(mode,day,slotIdx){
