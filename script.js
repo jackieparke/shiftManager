@@ -115,6 +115,25 @@ async function loadUserData(){
       initials: r.staff?.initials
     }));
   }
+
+  await archiveOldRequests();
+}
+
+async function archiveOldRequests(){
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const old = requests.filter(r =>
+    Array.isArray(r.dates) &&
+    r.dates.every(d => new Date(d+'T00:00:00') < today)
+  );
+
+  if(!old.length) return;
+
+  requests = requests.filter(r => !old.some(o => o.id === r.id));
+
+  const oldIds = old.map(r => r.id);
+  await supabase.from('time_off_requests').delete().in('id', oldIds);
 }
 
 // ─── Auth ──────────────────────────────────────────────────────────────────────
@@ -231,6 +250,13 @@ async function setNewPassword(){
     document.getElementById('app').style.display = 'flex';
     render();
   }
+}
+
+function pruneOldSchedules(){
+  const lastWeek = weekKey(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+  Object.keys(schedulesByWeek).forEach(key => {
+    if(key < lastWeek) delete schedulesByWeek[key];
+  });
 }
 
 // ─── Week helpers ──────────────────────────────────────────────────────────────
@@ -448,6 +474,7 @@ function setMode(m){ scheduleMode=m; render(); }
 function setManagerScheduleView(v){ managerScheduleView=v; render(); }
 
 function render(){
+  pruneOldSchedules ();
   const days = getWeekDays();
   document.getElementById('todayLabelTop').textContent =
     'Today: '+new Date().toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
