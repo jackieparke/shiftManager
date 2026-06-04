@@ -242,34 +242,48 @@ function serverSlotsForDay(mode, day){
     ];
     return [{role:'Server', area:'Server', time:'4pm'}, {role:'Server', area:'Server', time:'5pm'}, {role:'Server', area:'On call', time:'5pm', oncall:true}];
   }
-  if(day===0) return [
-    {role:'Server', area:'Patio', time:'4pm', patio:true}, {role:'Server', area:'Patio', time:'4pm', patio:true},
-    {role:'Server', area:'Downstairs', time:'4pm'}, {role:'Server', area:'On call', time:'5pm', oncall:true}
-  ];
-  if(day>=1 && day<=3) return [
-    {role:'Server', area:'Downstairs', time:'4pm'}, {role:'Server', area:'Downstairs', time:'5pm'},
-    {role:'Server', area:'Upstairs', time:'4pm', patio:true}, {role:'Server', area:'On call', time:'5pm', oncall:true}
-  ];
-  if(day===4 || day===5) return [
-    {role:'Server', area:'Downstairs', time:'4pm'}, {role:'Server', area:'Downstairs', time:'5pm'},
-    {role:'Server', area:'Upstairs', time:'4pm', patio:true}, {role:'Server', area:'Upstairs', time:'5pm', patio:true},
-    {role:'Server', area:'On call', time:'5pm', oncall:true}
-  ];
-  if(day===6) return [
-    {role:'Server', area:'Patio', time:'4pm', patio:true}, {role:'Server', area:'Patio', time:'4pm', patio:true},
-    {role:'Server', area:'Downstairs', time:'4pm'}, {role:'Server', area:'On call', time:'5pm', oncall:true}
-  ];
+  if(mode==='patio'){
+    if(day===0) return [
+      {role:'Server', area:'Patio', time:'4pm', patio:true}, {role:'Server', area:'Patio', time:'4pm', patio:true},
+      {role:'Server', area:'Downstairs', time:'4pm'}, {role:'Server', area:'On call', time:'5pm', oncall:true}
+    ];
+    if(day>=1 && day<=3) return [
+      {role:'Server', area:'Downstairs', time:'4pm'}, {role:'Server', area:'Downstairs', time:'5pm'},
+      {role:'Server', area:'Upstairs', time:'4pm', patio:true}, {role:'Server', area:'On call', time:'5pm', oncall:true}
+    ];
+    if(day===4 || day===5) return [
+      {role:'Server', area:'Downstairs', time:'4pm'}, {role:'Server', area:'Downstairs', time:'5pm'},
+      {role:'Server', area:'Upstairs', time:'4pm', patio:true}, {role:'Server', area:'Upstairs', time:'5pm', patio:true},
+      {role:'Server', area:'On call', time:'5pm', oncall:true}
+    ];
+    if(day===6) return [
+      {role:'Server', area:'Patio', time:'4pm', patio:true}, {role:'Server', area:'Patio', time:'4pm', patio:true},
+      {role:'Server', area:'Downstairs', time:'4pm'}, {role:'Server', area:'On call', time:'5pm', oncall:true}
+    ];
+  }
   return [];
 }
-function bartenderSlotsForDay(day){
+function bartenderSlotsForDay(mode, day){
+  if(mode === 'patio'){
+    if(day===4 || day===5) return [
+      {role:'Bartender', area:'Inside bar', time:'3:30pm'},
+      {role:'Bartender', area:'Inside bar', time:'5pm'},
+      {role:'Bartender', area:'Patio bar', time:'3:30pm', patio:true},
+      {role:'Bartender', area:'Patio bar', time:'5pm', patio:true}
+    ];
+    return [
+      {role:'Bartender', area:'Inside bar', time:'3:30pm'},
+      {role:'Bartender', area:'Patio bar', time:'3:30pm', patio:true},
+      {role:'Bartender', area:'Float', time:'5pm'}
+    ];
+  }
+  // regular — inside bar only, no float, no patio bar
   if(day===4 || day===5) return [
-    {role:'Bartender', area:'Inside bar', time:'3:30pm'}, {role:'Bartender', area:'Inside bar', time:'5pm'},
-    {role:'Bartender', area:'Patio bar', time:'3:30pm', patio:true}, {role:'Bartender', area:'Patio bar', time:'5pm', patio:true}
+    {role:'Bartender', area:'Inside bar', time:'3:30pm'},
+    {role:'Bartender', area:'Inside bar', time:'5pm'},
   ];
   return [
     {role:'Bartender', area:'Inside bar', time:'3:30pm'},
-    {role:'Bartender', area:'Patio bar', time:'3:30pm', patio:true},
-    {role:'Bartender', area:'Float', time:'5pm'}
   ];
 }
 function supportSlotsForDay(day){
@@ -287,7 +301,15 @@ function supportSlotsForDay(day){
 }
 function getSlotsForDay(mode, day){
   if(mode==='blank') return [];
-  return [...serverSlotsForDay(mode, day), ...bartenderSlotsForDay(day), ...supportSlotsForDay(day)];
+  if(mode==='blank-regular'){
+    return [...serverSlotsForDay('regular', day), ...bartenderSlotsForDay('regular', day), ...supportSlotsForDay(day)]
+      .map(slot => ({...slot, staffId: null}));
+  }
+  if(mode==='blank-patio'){
+    return [...serverSlotsForDay('patio', day), ...bartenderSlotsForDay('patio', day), ...supportSlotsForDay(day)]
+      .map(slot => ({...slot, staffId: null}));
+  }
+  return [...serverSlotsForDay(mode, day), ...bartenderSlotsForDay(mode, day), ...supportSlotsForDay(day)];
 }
 function visibleSlotsForRole(slots, viewerRole){
   if(role==='manager' || !viewerRole) return slots;
@@ -318,7 +340,6 @@ function render() {
   const pc = pendingCount();
   document.getElementById('tabs').innerHTML = isMgr ? `
     <div class="tab ${activeTab==='schedule'?'active':''}" onclick="setTab('schedule')"><i class="ti ti-layout-grid"></i> Schedule</div>
-    <div class="tab ${activeTab==='templates'?'active':''}" onclick="setTab('templates')"><i class="ti ti-copy"></i> Manager templates</div>
     <div class="tab ${activeTab==='availability'?'active':''}" onclick="setTab('availability')"><i class="ti ti-user-check"></i> Availability</div>
     <div class="tab ${activeTab==='requests'?'active':''}" onclick="setTab('requests')"><i class="ti ti-calendar-off"></i> Requests ${pc?`<span class="badge">${pc}</span>`:''}</div>` : `
     <div class="tab ${activeTab==='schedule'?'active':''}" onclick="setTab('schedule')"><i class="ti ti-layout-grid"></i> My schedule</div>
@@ -327,7 +348,6 @@ function render() {
 
   const tc = document.getElementById('tab-content');
   if (activeTab==='schedule') tc.innerHTML = isMgr ? renderManagerScheduleView(days) : renderEmployeeView(days);
-  else if (activeTab==='templates') tc.innerHTML = renderTemplates(days);
   else if (activeTab==='availability') tc.innerHTML = isMgr ? renderAvailabilityOverview() : renderAvailabilityForm();
   else if (isMgr) tc.innerHTML = renderManagerRequests();
   else tc.innerHTML = renderEmployeeRequests(days);
@@ -340,7 +360,6 @@ function renderModeToggle(view){
   const key = weekKey(selectedWeekStart);
   const week = ensureSchedule(key);
   const isPublished = !!week.publishedAssignments;
-  const isDraft = view === 'draft';
 
   return `<div class="schedule-status">
     <div>
@@ -360,11 +379,9 @@ function renderModeToggle(view){
       <button class="pill-btn ${isSameWeekKey('current') ? 'active' : ''}" onclick="selectWeek('current')">
         Current schedule (${currentWeekRangeLabel()})
       </button>
-
       <button class="pill-btn ${isSameWeekKey('next') ? 'active' : ''}" onclick="selectWeek('next')">
         Next week (${nextWeekRangeLabel()})
       </button>
-
       <div class="picked-week-label">Selected week: ${selectedWeekRangeLabel()}</div>
       <input type="date" onchange="pickWeekDate(this.value)">
     </div>
@@ -373,17 +390,16 @@ function renderModeToggle(view){
   <div class="template-bar">
     <div class="template-group">
       <span class="template-label">Schedule type</span>
-      <button class="pill-btn ${scheduleMode==='regular'?'active':''}" ${isDraft?'':'disabled'} onclick="setMode('regular')">Regular</button>
-      <button class="pill-btn ${scheduleMode==='patio'?'active':''}" ${isDraft?'':'disabled'} onclick="setMode('patio')">Patio season</button>
-      <button class="pill-btn ${scheduleMode==='blank'?'active':''}" ${isDraft?'':'disabled'} onclick="setMode('blank')">Blank schedule</button>
+      <button class="pill-btn ${scheduleMode==='regular'?'active':''}" onclick="setMode('regular')">Regular</button>
+      <button class="pill-btn ${scheduleMode==='patio'?'active':''}" onclick="setMode('patio')">Patio season</button>
+      <button class="pill-btn ${scheduleMode==='blank-regular'?'active':''}" onclick="setMode('blank-regular')">Blank regular</button>
+      <button class="pill-btn ${scheduleMode==='blank-patio'?'active':''}" onclick="setMode('blank-patio')">Blank patio</button>
     </div>
 
     <div class="manager-tools">
-      ${isDraft ? `
-        <button class="btn-save" onclick="autoGenerateSchedule()"><i class="ti ti-wand"></i> Auto-generate draft</button>
-        <button class="btn-save" onclick="publishSchedule()"><i class="ti ti-upload"></i> Publish this week</button>
-      ` : ''}
-      <button class="btn-secondary" onclick="exportCSV()"><i class="ti ti-download"></i> Export CSV</button>
+      <button class="btn-save" onclick="autoGenerateSchedule()"><i class="ti ti-wand"></i> Auto-generate draft</button>
+      <button class="btn-save" onclick="publishSchedule()"><i class="ti ti-upload"></i> Publish this week</button>
+      <button class="btn-secondary" onclick="exportCSV()"><i class="ti ti-download"></i> Export schedule</button>
     </div>
   </div>`;
 }
@@ -1151,7 +1167,6 @@ window.resolveShiftRequest = resolveShiftRequest;
 window.changeWeek = changeWeek;
 window.setTab = setTab;
 window.setMode = setMode;
-window.setManagerTemplate = setManagerTemplate;
 window.setManagerScheduleView = setManagerScheduleView;
 window.changeUpcomingPage = changeUpcomingPage;
 window.editSlot = editSlot;
