@@ -1309,13 +1309,98 @@ function submitReq(){
 function showModal(content){ closeModal(); const ov=document.createElement('div'); ov.className='modal-overlay'; ov.id='modal-ov'; ov.innerHTML=`<div class="modal">${content}</div>`; ov.addEventListener('click',e=>{if(e.target===ov)closeModal();}); document.body.appendChild(ov); }
 function closeModal(){ const m=document.getElementById('modal-ov'); if(m) m.remove(); }
 
-populateLogin();
+async function initApp(){
+  const hash = window.location.hash;
+  if(hash && hash.includes('access_token')){
+    const { data } = await supabase.auth.getSession();
+    if(data?.session){
+      document.getElementById('login-screen').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+      document.getElementById('login-screen').querySelector('.login-card').innerHTML = `
+        <div class="login-title"><i class="ti ti-tool-kitchen-2" style="color:#D85A30"></i> Set your password</div>
+        <div class="login-subtitle">Choose a password to complete your account setup.</div>
+        <div class="login-row">
+          <label class="flabel">New password</label>
+          <input type="password" id="new-password" placeholder="Min 6 characters" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:14px" />
+        </div>
+        <div id="login-error" style="color:red;font-size:13px;margin-bottom:8px;display:none"></div>
+        <button class="btn-save" style="width:100%;justify-content:center;margin-top:8px" onclick="setNewPassword()">
+          <i class="ti ti-check"></i> Set password
+        </button>
+      `;
+      return;
+    }
+  }
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if(session){
+    const { data: staffRow } = await supabase
+      .from('staff')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+
+    if(staffRow){
+      currentUser = staffRow;
+      activeEmployeeId = staffRow.id;
+      role = staffRow.role === 'Manager' ? 'manager' : 'employee';
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('app').style.display = 'flex';
+      render();
+      return;
+    }
+  }
+
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+async function setNewPassword(){
+  const password = document.getElementById('new-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
+
+  if(password.length < 6){
+    errEl.textContent = 'Password must be at least 6 characters.';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if(error){
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  window.history.replaceState(null, '', window.location.pathname);
+
+  const { data: { session } } = await supabase.auth.getSession();
+  const { data: staffRow } = await supabase
+    .from('staff')
+    .select('*')
+    .eq('id', session.user.id)
+    .single();
+
+  if(staffRow){
+    currentUser = staffRow;
+    activeEmployeeId = staffRow.id;
+    role = staffRow.role === 'Manager' ? 'manager' : 'employee';
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    render();
+  }
+}
+
+initApp();
+
 
 window.selectWeek = selectWeek;
 window.pickWeekDate = pickWeekDate;
 window.requestGiveUp = requestGiveUp;
 window.openSwapModal = openSwapModal;
 window.claimShift = claimShift;
+window.setNewPassword = setNewPassword;
 window.submitSwapRequest = submitSwapRequest;
 window.submitReq = submitReq;
 window.resolve = resolve;
