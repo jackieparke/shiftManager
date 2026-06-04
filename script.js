@@ -641,6 +641,10 @@ function exportCSV(){
     ? week.draftAssignments
     : (week.publishedAssignments || {});
 
+  const managerSource = managerScheduleView === 'draft'
+    ? week.draftManagers
+    : (week.publishedManagers || {});
+
   const groups = {
     'Servers': {},
     'Bar': {},
@@ -668,7 +672,13 @@ function exportCSV(){
   }
 
   const headerRow = ['', ...days.map((d, i) => `${DAYS[i]} ${fmt(d)}`)];
-  const rows = [headerRow];
+  const managerRow = ['Manager on duty', ...days.map((d, i) => {
+    const m = managerSource[i];
+    const s = m ? staffById(m.staffId) : null;
+    return s ? `${s.name} (${m.time})` : 'Unassigned';
+  })];
+
+  const rows = [headerRow, managerRow, Array(8).fill('')];
 
   Object.entries(groups).forEach(([groupName, staffMap]) => {
     if(Object.keys(staffMap).length === 0) return;
@@ -684,7 +694,7 @@ function exportCSV(){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `schedule-${fmt(days[0]).replace(' ','-')}-to-${fmt(days[6]).replace(' ','-')}.csv`;
+  a.download = `export-schedule-${fmt(days[0]).replace(' ','-')}-to-${fmt(days[6]).replace(' ','-')}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
