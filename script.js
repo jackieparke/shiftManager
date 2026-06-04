@@ -725,7 +725,7 @@ for(let d = 0; d < 7; d++){
   Object.entries(groups).forEach(([groupName, staffMap]) => {
     if(Object.keys(staffMap).length === 0) return;
     rows.push([groupName, ...Array(7).fill('')]);
-    Object.entries(staffMap).forEach(([name, shifts]) => {
+    Object.entries(staffMap).sort(([a],[b]) => a.localeCompare(b)).forEach(([name, shifts]) => {
       rows.push([name, ...shifts]);
     });
     rows.push(Array(8).fill(''));
