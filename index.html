@@ -10,14 +10,18 @@
 <body>
 <div class="login-screen" id="login-screen">
   <div class="login-card">
-    <div class="login-title"><i class="ti ti-tool-kitchen-2" style="color:#D85A30"></i> Shift Manager Login</div>
-    <div class="login-subtitle">Select a demo user. Managers go to the manager tools; employees only see their own job-type schedule and requests.</div>
+    <div class="login-title"><i class="ti ti-tool-kitchen-2" style="color:#D85A30"></i> Shift Manager</div>
+    <div class="login-subtitle">Sign in to view your schedule and manage shifts.</div>
     <div class="login-row">
-      <label class="flabel">User</label>
-      <select id="login-user"></select>
+      <label class="flabel">Email</label>
+      <input type="email" id="login-email" placeholder="your@email.com" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:14px" />
     </div>
-    <button class="btn-save" style="width:100%;justify-content:center" onclick="login()"><i class="ti ti-login"></i> Log in</button>
-    <div class="login-help" style="margin-top:14px">Prototype login only. Real app version would use usernames/passwords and database-backed permissions.</div>
+    <div class="login-row">
+      <label class="flabel">Password</label>
+      <input type="password" id="login-password" placeholder="Password" style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);font-size:14px" />
+    </div>
+    <div id="login-error" style="color:red;font-size:13px;margin-bottom:8px;display:none"></div>
+    <button class="btn-save" style="width:100%;justify-content:center;margin-top:8px" onclick="login()"><i class="ti ti-login"></i> Log in</button>
   </div>
 </div>
 <div class="app" id="app" style="display:none">
