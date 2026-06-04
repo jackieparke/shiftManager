@@ -21,6 +21,8 @@ const STAFF = [
   { id:14, name:'Gia N.', initials:'GN', color:'#E1F5EE', text:'#0F6E56', role:'Busser' },
   { id:15, name:'Ty B.', initials:'TY', color:'#E6F1FB', text:'#185FA5', role:'Busser' },
   { id:16, name:'Lena F.', initials:'LF', color:'#EEEDFE', text:'#3C3489', role:'FoodRunner' },
+  { id:17, name:'Host 1', initials:'H1', color:'#F3E8FF', text:'#6B21A8', role:'Host' },
+  { id:18, name:'Host 2', initials:'H2', color:'#F3E8FF', text:'#6B21A8', role:'Host' },
 ];
 const SERVER_IDS = [1,2,3,4,5];
 const BARTENDER_IDS = [9,10,11,12];
@@ -28,6 +30,7 @@ const BARBACK_IDS = [13];
 const BUSSER_IDS = [14,15];
 const FOODRUNNER_IDS = [16];
 const MANAGER_IDS = [6,7,8];
+const HOST_IDS = [17,18];
 const EMPLOYEE_IDS = STAFF.filter(s=>s.role!=='Manager').map(s=>s.id);
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const LONG_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -130,6 +133,7 @@ function getStaffIdsForRole(roleName){
   if(roleName==='Barback') return BARBACK_IDS;
   if(roleName==='Busser') return BUSSER_IDS;
   if(roleName==='FoodRunner') return FOODRUNNER_IDS;
+  if(roleName==='Host') return HOST_IDS;
   return EMPLOYEE_IDS;
 }
 function buildInitialAssignments(){
@@ -273,7 +277,7 @@ function supportSlotsForDay(day){
   if(day===4 || day===5){
     slots.push({role:'Barback', area:'Barback', time:'4pm'});
     slots.push({role:'Busser', area:'Downstairs busser', time:'3:30pm'});
-    slots.push({role:'Busser', area:'Upstairs busser', time:'3:30pm', patio:true});
+    slots.push({role:'Busser', area:'Patio busser', time:'3:30pm', patio:true});
     slots.push({role:'Busser', area:'Float busser', time:'5pm'});
   } else {
     slots.push({role:'Busser', area:'Busser', time:'3:30pm'});
@@ -398,36 +402,76 @@ function renderSchedule(days, isMgr, view='published') {
   const managerSource = editable
     ? week.draftManagers
     : (week.publishedManagers || {});
+
   let h = `<div class="schedule-wrap">${isMgr?renderModeToggle(view):''}`;
   h += `<div class="day-headers"><div></div>` + days.map((d,i)=>`<div class="day-header${isToday(d)?' today':''}">${DAYS[i]}<span class="num">${d.getDate()}</span></div>`).join('')+`</div>`;
   h += `<div class="manager-strip"><div class="manager-label">Manager on duty</div>` + days.map((d,i)=>{
     const m = managerSource[i] || { staffId: null, time: '' };
     const s = staffById(m.staffId);
-    return `<div class="manager-cell" ${editable?`onclick="editManager(${i})" title="Click to edit manager"`:''}>
+    return `<div class="manager-cell" ${editable?`onclick="editManager(${i})" title="Click to edit manager"`:''}> 
       <div class="manager-name">${s?s.name:'Unassigned'}</div><div class="manager-time">${m.time ? m.time + ' start' : ''}</div></div>`;
   }).join('') + `</div>`;
+
   h += `<div class="slot-grid">`;
+
+  const supportRoles = ['Busser','Barback','FoodRunner'];
+
   for(let d=0; d<7; d++){
     const viewer = staffById(activeEmployeeId);
     const rawSlots = visibleSlotsForRole(source[`${keyPrefix}-${d}`] || [], viewer && viewer.role);
-    // Published/current schedule views should not show unassigned/open slots.
-    // Draft editing still shows them so managers can build the schedule.
     const slots = editable ? rawSlots : rawSlots.filter(slot => !!slot.staffId);
+
     h += `<div class="template-day-card"><div class="template-day-title"><span>${LONG_DAYS[d]}</span><span class="template-day-date">${fmt(days[d])}</span></div>`;
+
     if(!slots.length && !editable){
       h += `<div class="empty-day-note">No assigned shifts</div>`;
+    } else {
+      // group slots by role keeping original index for editSlot
+      const byRole = {};
+      slots.forEach((slot, i) => {
+        const r = slot.role || 'Server';
+        if(!byRole[r]) byRole[r] = [];
+        byRole[r].push({slot, i});
+      });
+
+      const sections = [
+        { label: 'Hosts', roles: ['Host'] },
+        { label: 'Servers', roles: ['Server'] },
+        { label: 'Bar', roles: ['Bartender','Barback'] },
+        { label: 'Support Staff', roles: ['Busser','FoodRunner'] },
+      ];
+
+      sections.forEach(section => {
+        const sectionSlots = section.roles.flatMap(r => byRole[r] || []);
+        if(!sectionSlots.length) return;
+
+        h += `<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--text3);padding:8px 0 4px;border-top:1px solid var(--border);margin-top:6px">${section.label}</div>`;
+
+        sectionSlots.forEach(({slot, i}) => {
+          const s = staffById(slot.staffId);
+          const cls = slot.special?'special':slot.oncall?'oncall':slot.patio?'patio':'filled';
+          const ok = !slot.staffId || isAvailable(slot.staffId, d, slot);
+          const areaLabel = supportRoles.includes(slot.role) ? ` - ${slot.area}` : '';
+          const timeStr = slot.time
+            + (slot.oncall ? ' - on call' : '')
+            + (slot.patio ? ' - patio' : '')
+            + (slot.special ? ' - special event' : '')
+            + areaLabel;
+
+          h += `<div class="slot ${cls}" ${editable?`onclick="editSlot('${keyPrefix}',${d},${i})" title="Click to assign"`:''}> 
+            <div class="slot-area">${slot.area} <span class="role-chip">${slot.role||'Server'}</span></div>
+            <div class="slot-main">${s?s.name:'Unassigned'}${s?` <span class="role-chip">${s.role}</span>`:''}</div>
+            <div class="slot-time">${timeStr}</div>
+            ${!ok?'<div class="warning-text">Not available</div>':''}
+          </div>`;
+        });
+      });
     }
-    slots.forEach((slot, i)=>{
-      const s = staffById(slot.staffId);
-      const cls = slot.special ? 'special' : slot.oncall ? 'oncall' : slot.patio ? 'patio' : 'filled';
-      const ok = !slot.staffId || isAvailable(slot.staffId,d,slot);
-      h += `<div class="slot ${cls}" ${editable?`onclick="editSlot('${keyPrefix}',${d},${i})" title="Click to assign"`:''}>
-        <div class="slot-area">${slot.area} <span class="role-chip">${slot.role || 'Server'}</span></div><div class="slot-main">${s?s.name:'Unassigned'}${s?` <span class="role-chip">${s.role}</span>`:''}</div><div class="slot-time">${slot.time}${slot.oncall?' · on call':''}${slot.patio?' · patio':''}${slot.special?' · special event':''}</div>${!ok?'<div class="warning-text">Not available</div>':''}
-      </div>`;
-    });
+
     if(editable) h += `<button class="btn-secondary" style="width:100%;justify-content:center;margin-top:6px" onclick="addSlot('${keyPrefix}',${d})"><i class="ti ti-plus"></i> Add shift</button>`;
     h += `</div>`;
   }
+
   h += `</div><div class="legend">
     <span class="leg-item"><span class="leg-dot" style="background:#E6F1FB;border:1px solid #85B7EB"></span>Server / Downstairs</span>
     <span class="leg-item"><span class="leg-dot" style="background:#E1F5EE;border:1px solid #5DCAA5"></span>Patio / Upstairs</span>
@@ -672,7 +716,7 @@ function exportCSV(){
   }
 
   const headerRow = ['', ...days.map((d, i) => `${DAYS[i]} ${fmt(d)}`)];
-  const managerRow = ['Manager on duty', ...days.map((d, i) => {
+  const managerRow = ['Manager', ...days.map((d, i) => {
     const m = managerSource[i];
     const s = m ? staffById(m.staffId) : null;
     return s ? `${s.name} (${m.time})` : 'Unassigned';
