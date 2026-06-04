@@ -640,30 +640,53 @@ function exportCSV(){
     ? week.draftAssignments
     : (week.publishedAssignments || {});
 
-  const rows = [['Date','Day','Group','Role','Area','Time','Employee']];
+  const groups = {
+    'Servers': {},
+    'Bar': {},
+    'Support Staff': {}
+  };
+
+  const groupForRole = (role) => {
+    if(role === 'Server') return 'Servers';
+    if(role === 'Bartender' || role === 'Barback') return 'Bar';
+    return 'Support Staff';
+  };
 
   for(let d = 0; d < 7; d++){
     const slots = source[`${scheduleMode}-${d}`] || [];
-
-    const sortedSlots = [...slots].sort((a,b)=>{
-      const order = {'Servers':1, 'Support Staff':2, 'Bar':3, 'Other':4};
-      return order[roleGroup(a.role)] - order[roleGroup(b.role)];
-    });
-
-    sortedSlots.forEach(slot=>{
+    slots.forEach(slot => {
+      if(!slot.staffId) return;
       const emp = staffById(slot.staffId);
-
-      rows.push([
-        fmt(days[d]),
-        LONG_DAYS[d],
-        roleGroup(slot.role || 'Server'),
-        slot.role || 'Server',
-        slot.area,
-        slot.time,
-        emp ? emp.name : 'Unassigned'
-      ]);
+      if(!emp) return;
+      const group = groupForRole(slot.role || 'Server');
+      if(!groups[group][emp.name]) groups[group][emp.name] = Array(7).fill('');
+      const existing = groups[group][emp.name][d];
+      const label = slot.time + (slot.oncall ? ' - on call' : '') + (slot.patio ? ' - patio' : '');
+      groups[group][emp.name][d] = existing ? existing + ' / ' + label : label;
     });
   }
+
+  const headerRow = ['', ...days.map((d, i) => `${DAYS[i]} ${fmt(d)}`)];
+  const rows = [headerRow];
+
+  Object.entries(groups).forEach(([groupName, staffMap]) => {
+    if(Object.keys(staffMap).length === 0) return;
+    rows.push([groupName, ...Array(7).fill('')]);
+    Object.entries(staffMap).forEach(([name, shifts]) => {
+      rows.push([name, ...shifts]);
+    });
+    rows.push(Array(8).fill(''));
+  });
+
+  const csv = rows.map(r => r.map(csvEscape).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `schedule-${fmt(days[0]).replace(' ','-')}-to-${fmt(days[6]).replace(' ','-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
   const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
