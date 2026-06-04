@@ -383,6 +383,7 @@ function renderModeToggle(view){
     </div>
   </div>`;
 }
+
 function renderSchedule(days, isMgr, view='published') {
   const keyPrefix = scheduleMode;
   const editable = isMgr && view === 'draft';
@@ -685,18 +686,6 @@ function exportCSV(){
   a.href = url;
   a.download = `schedule-${fmt(days[0]).replace(' ','-')}-to-${fmt(days[6]).replace(' ','-')}.csv`;
   a.click();
-  URL.revokeObjectURL(url);
-}
-
-  const csv = rows.map(r=>r.map(csvEscape).join(',')).join('\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `schedule-${fmt(days[0]).replace(' ','-')}-to-${fmt(days[6]).replace(' ','-')}.csv`;
-  a.click();
-
   URL.revokeObjectURL(url);
 }
 
