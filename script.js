@@ -32,7 +32,7 @@ const EMPLOYEE_IDS = STAFF.filter(s=>s.role!=='Manager').map(s=>s.id);
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const LONG_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-let role = 'manager', activeTab = 'schedule', scheduleMode = 'regular', upcomingPage = 0, activeEmployeeId = 1;
+let role = 'manager', activeTab = 'schedule', scheduleMode = 'blank-regular', upcomingPage = 0, activeEmployeeId = 1;
 let managerScheduleView = 'draft';
 
 let managersByDay = {
@@ -420,8 +420,6 @@ function renderModeToggle(view){
   <div class="template-bar">
     <div class="template-group">
       <span class="template-label">Schedule type</span>
-      <button class="pill-btn ${scheduleMode==='regular'?'active':''}" onclick="setMode('regular')">Regular</button>
-      <button class="pill-btn ${scheduleMode==='patio'?'active':''}" onclick="setMode('patio')">Patio season</button>
       <button class="pill-btn ${scheduleMode==='blank-regular'?'active':''}" onclick="setMode('blank-regular')">Blank regular</button>
       <button class="pill-btn ${scheduleMode==='blank-patio'?'active':''}" onclick="setMode('blank-patio')">Blank patio</button>
       <button class="pill-btn" onclick="loadPreviousSchedule()"><i class="ti ti-history"></i> Previous schedule</button>
