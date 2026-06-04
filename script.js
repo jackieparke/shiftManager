@@ -697,7 +697,7 @@ function exportCSV(){
     return 'Support Staff';
   };
 
-  for(let d = 0; d < 7; d++){
+for(let d = 0; d < 7; d++){
     const slots = source[`${scheduleMode}-${d}`] || [];
     slots.forEach(slot => {
       if(!slot.staffId) return;
@@ -706,7 +706,9 @@ function exportCSV(){
       const group = groupForRole(slot.role || 'Server');
       if(!groups[group][emp.name]) groups[group][emp.name] = Array(7).fill('');
       const existing = groups[group][emp.name][d];
-      const label = slot.time + (slot.oncall ? ' - on call' : '') + (slot.patio ? ' - patio' : '');
+      const isSupportRole = ['Busser','Barback','FoodRunner'].includes(slot.role);
+      const roleLabel = isSupportRole ? ` - ${slot.role === 'FoodRunner' ? 'Expo' : slot.role}` : '';
+      const label = slot.time + (slot.oncall ? ' - on call' : '') + (slot.patio ? ' - patio' : '') + roleLabel;
       groups[group][emp.name][d] = existing ? existing + ' / ' + label : label;
     });
   }
