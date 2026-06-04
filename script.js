@@ -138,16 +138,13 @@ function getStaffIdsForRole(roleName){
 }
 function buildInitialAssignments(){
   const a = {};
-  ['regular','patio'].forEach(mode=>{
-    getSlotsForWeek(mode).forEach((slots, day)=>{
+  ['regular','patio','blank-regular','blank-patio'].forEach(mode=>{
+    const baseMode = mode === 'blank-regular' ? 'regular' : mode === 'blank-patio' ? 'patio' : mode;
+    getSlotsForWeek(baseMode).forEach((slots, day)=>{
       a[`${mode}-${day}`] = slots.map((slot, i)=>{
-        const ids = getStaffIdsForRole(slot.role || 'Server');
-        return {...slot, staffId: ids.length ? ids[(day+i)%ids.length] : null};
+        return {...slot, staffId: null}; // blank modes start with no one assigned
       });
     });
-  });
-  getSlotsForWeek('regular').forEach((slots, day)=>{
-    a[`managerRegular-${day}`] = slots.map((slot)=>({...slot, staffId:null}));
   });
   return a;
 }
