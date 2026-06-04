@@ -36,6 +36,7 @@ const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const LONG_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
 let role = 'manager', activeTab = 'schedule', scheduleMode = 'blank-regular', upcomingPage = 0, activeEmployeeId = 1;
+let currentUser = null;
 let managerScheduleView = 'draft';
 
 let managersByDay = {
@@ -192,17 +193,35 @@ function fmt(d) { return d.toLocaleDateString('en-US',{month:'short',day:'numeri
 function pendingCount() { return requests.filter(r=>r.status==='pending').length + shiftRequests.filter(r=>r.status==='pending').length; }
 function staffById(id){ return STAFF.find(s=>s.id===id); }
 
-function populateLogin(){
-  const sel = document.getElementById('login-user');
-  if(!sel) return;
-  sel.innerHTML = STAFF.map(s=>`<option value="${s.id}">${s.name} — ${s.role}</option>`).join('');
-}
+window.login = async function() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.style.display = 'none';
 
-window.login = function() {
-  const selected = +document.getElementById('login-user').value;
-  const user = staffById(selected) || STAFF[0];
-  activeEmployeeId = user.role === 'Manager' ? activeEmployeeId : user.id;
-  role = user.role === 'Manager' ? 'manager' : 'employee';
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if(error){
+    errEl.textContent = error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const { data: staffRow } = await supabase
+    .from('staff')
+    .select('*')
+    .eq('id', data.user.id)
+    .single();
+
+  if(!staffRow){
+    errEl.textContent = 'No staff profile found. Contact your manager.';
+    errEl.style.display = 'block';
+    await supabase.auth.signOut();
+    return;
+  }
+
+  currentUser = staffRow;
+  activeEmployeeId = staffRow.id;
+  role = staffRow.role === 'Manager' ? 'manager' : 'employee';
   activeTab = 'schedule';
   upcomingPage = 0;
   document.getElementById('login-screen').style.display = 'none';
@@ -210,7 +229,8 @@ window.login = function() {
   render();
 }
 
-window.logout = function() {
+window.logout = async function() {
+  await supabase.auth.signOut();
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'flex';
 }
@@ -218,11 +238,11 @@ window.logout = function() {
 function renderUserChip(){
   const chip = document.getElementById('user-chip');
   if(!chip) return;
-  const user = role === 'manager' ? staffById(6) : staffById(activeEmployeeId);
-  const name = user ? user.name : 'User';
-  const userRole = user ? user.role : '';
+  const name = currentUser ? currentUser.name : 'User';
+  const userRole = currentUser ? currentUser.role : '';
   chip.innerHTML = `<div><strong>${name}</strong><span>${role==='manager'?'Manager view':userRole+' view'}</span></div><button class="btn-secondary" onclick="logout()"><i class="ti ti-logout"></i> Log out</button>`;
 }
+
 
 function changeWeek(dir){
   selectedWeekStart.setDate(selectedWeekStart.getDate() + (dir * 7));
