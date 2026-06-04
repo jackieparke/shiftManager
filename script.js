@@ -224,6 +224,9 @@ window.login = async function() {
   role = staffRow.role === 'Manager' ? 'manager' : 'employee';
   activeTab = 'schedule';
   upcomingPage = 0;
+
+  await loadUserData();
+
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   render();
@@ -896,14 +899,26 @@ function renderAvailabilityForm(){
   return h+`</div></div>`;
 }
 
-function setAvailability(staffId, dayIdx, key, value){
+async function setAvailability(staffId, dayIdx, key, value){
   if(!availability[staffId]) availability[staffId] = {};
   if(!availability[staffId][dayIdx]) availability[staffId][dayIdx] = {'4pm':true,'5pm':true};
-  availability[staffId][dayIdx][key]=value;
+  availability[staffId][dayIdx][key] = value;
+
+  const current = availability[staffId][dayIdx];
+  await supabase.from('availability').upsert({
+    staff_id: staffId,
+    day_of_week: dayIdx,
+    shift_4pm: current['4pm'],
+    shift_5pm: current['5pm']
+  }, { onConflict: 'staff_id,day_of_week' });
 }
 
-function setPreferredShifts(staffId, value){
+async function setPreferredShifts(staffId, value){
   preferredShifts[staffId] = value;
+  await supabase.from('preferred_shifts').upsert({
+    staff_id: staffId,
+    preferred_count: value
+  }, { onConflict: 'staff_id' });
 }
 
 function renderAvailabilityOverview(){
@@ -978,14 +993,16 @@ function renderManagerRequests() {
 }
 
 function reqCard(r, actions) {
-  const s=staffById(r.staffId);
+  const color = r.color || '#E6F1FB';
+  const text = r.text || '#185FA5';
+  const initials = r.initials || '??';
   const badge = r.status==='approved'?'sa':r.status==='denied'?'sd':'spe';
   const label = r.status==='approved'?'Approved':r.status==='denied'?'Denied':'Pending';
   const dateLabel = Array.isArray(r.dates)
     ? r.dates[0] + (r.dates.length > 1 ? ` – ${r.dates[r.dates.length-1]}` : '')
     : r.dates;
   return `<div class="req-card">
-    <div class="avatar" style="background:${s.color};color:${s.text}">${s.initials}</div>
+    <div class="avatar" style="background:${color};color:${text}">${initials}</div>
     <div class="req-info">
       <div class="req-name">${r.name}</div>
       <div class="req-detail"><i class="ti ti-calendar" style="font-size:12px;margin-right:3px"></i>${dateLabel}</div>
@@ -1200,8 +1217,9 @@ function changeUpcomingPage(dir){
   render();
 }
 
-function resolve(id,status){
-  requests.find(r=>r.id===id).status=status;
+async function resolve(id, status){
+  requests.find(r=>r.id===id).status = status;
+  await supabase.from('time_off_requests').update({ status }).eq('id', id);
   render();
 }
 
@@ -1301,10 +1319,11 @@ function claimShift(mode, day, slotIdx){
   render();
 }
 
-function submitReq(){
+async function submitReq(){
   const start = document.getElementById('emp-date-start').value;
   const end = document.getElementById('emp-date-end').value;
   if(!start){ alert('Please select a start date.'); return; }
+
   const dates = [];
   const cur = new Date(start + 'T00:00:00');
   const last = end ? new Date(end + 'T00:00:00') : new Date(start + 'T00:00:00');
@@ -1312,17 +1331,33 @@ function submitReq(){
     dates.push(cur.toISOString().slice(0,10));
     cur.setDate(cur.getDate() + 1);
   }
+
   const reason = document.getElementById('emp-reason').value.trim();
-  const today = new Date();
-  requests.unshift({
-    id: nextId++,
-    staffId: activeEmployeeId,
-    name: staffById(activeEmployeeId).name,
+  const submitted = new Date().toLocaleDateString('en-US',{month:'short',day:'numeric'});
+
+  const { data, error } = await supabase.from('time_off_requests').insert({
+    staff_id: activeEmployeeId,
     dates,
     reason: reason || 'No reason given',
     status: 'pending',
-    submitted: today.toLocaleDateString('en-US',{month:'short',day:'numeric'})
+    submitted
+  }).select('*, staff:staff_id(name, color, text_color, initials)').single();
+
+  if(error){ alert('Failed to submit request. Try again.'); return; }
+
+  requests.unshift({
+    id: data.id,
+    staffId: data.staff_id,
+    name: data.staff?.name || '',
+    dates: data.dates,
+    reason: data.reason,
+    status: data.status,
+    submitted: data.submitted,
+    color: data.staff?.color,
+    text: data.staff?.text_color,
+    initials: data.staff?.initials
   });
+
   render();
 }
 
@@ -1364,6 +1399,7 @@ async function initApp(){
       currentUser = staffRow;
       activeEmployeeId = staffRow.id;
       role = staffRow.role === 'Manager' ? 'manager' : 'employee';
+      await loadUserData();
       document.getElementById('login-screen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       render();
@@ -1373,6 +1409,55 @@ async function initApp(){
 
   document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+}
+
+async function loadUserData(){
+  // load availability from supabase
+  const { data: availRows } = await supabase
+    .from('availability')
+    .select('*');
+
+  if(availRows){
+    availRows.forEach(row => {
+      if(!availability[row.staff_id]) availability[row.staff_id] = {};
+      availability[row.staff_id][row.day_of_week] = {
+        '4pm': row.shift_4pm,
+        '5pm': row.shift_5pm
+      };
+    });
+  }
+
+  // load preferred shifts
+  const { data: prefRows } = await supabase
+    .from('preferred_shifts')
+    .select('*');
+
+  if(prefRows){
+    prefRows.forEach(row => {
+      preferredShifts[row.staff_id] = row.preferred_count;
+    });
+  }
+
+  // load time off requests
+  const { data: reqRows } = await supabase
+    .from('time_off_requests')
+    .select('*, staff:staff_id(name, color, text_color, initials)');
+
+  if(reqRows){
+    requests = reqRows.map(r => ({
+      id: r.id,
+      staffId: r.staff_id,
+      name: r.staff?.name || '',
+      dates: r.dates,
+      reason: r.reason,
+      status: r.status,
+      submitted: r.submitted,
+      color: r.staff?.color,
+      text: r.staff?.text_color,
+      initials: r.staff?.initials
+    }));
+    nextId = Math.max(...requests.map(r => r.id), 0) + 1;
+  }
 }
 
 async function setNewPassword(){
@@ -1414,7 +1499,7 @@ async function setNewPassword(){
 
 initApp();
 
-
+window.loadUserData = loadUserData;
 window.selectWeek = selectWeek;
 window.pickWeekDate = pickWeekDate;
 window.requestGiveUp = requestGiveUp;
