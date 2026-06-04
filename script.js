@@ -648,7 +648,11 @@ function autoGenerateSchedule(){
     slots.forEach(slot=>{
       const candidates = getStaffIdsForRole(slot.role || 'Server')
         .filter(id=>!usedToday.has(id) && isAvailable(id,d,slot))
-        .sort((a,b)=>usedCounts[a]-usedCounts[b] || a-b);
+        .sort((a,b)=>{
+          const diff = usedCounts[a] - usedCounts[b];
+          if(diff !== 0) return diff;
+          return Math.random() - 0.5; // random tiebreak
+        });
 
       if(candidates.length){
         slot.staffId = candidates[0];
