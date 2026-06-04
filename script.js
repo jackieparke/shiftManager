@@ -736,8 +736,7 @@ for(let d = 0; d < 7; d++){
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `export-schedule-${fmt(days[0]).replace(' ','-')}-to-${fmt(days[6]).replace(' ','-')}.csv`;
-  a.click();
+  a.download = `Weekly Schedule ${fmt(days[0])} - ${fmt(days[6])}.csv`;  a.click();
   URL.revokeObjectURL(url);
 }
 
