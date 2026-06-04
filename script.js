@@ -482,6 +482,7 @@ function renderSchedule(days, isMgr, view='published') {
 }
 
 function renderTemplates(days){
+  const week = ensureSchedule(weekKey(selectedWeekStart));
   const tabs = `<div class="template-bar"><div class="template-group"><span class="template-label">Manager template</span>
     <button class="pill-btn ${activeTemplate==='regular'?'active':''}" onclick="setManagerTemplate('regular')">Regular</button>
     <button class="pill-btn ${activeTemplate==='patio'?'active':''}" onclick="setManagerTemplate('patio')">Patio</button>
@@ -490,14 +491,10 @@ function renderTemplates(days){
   let mode = activeTemplate==='patio'?'patio':'regular';
   let h=`<div class="schedule-wrap">${tabs}<div class="slot-grid">`;
   for(let d=0; d<7; d++){
-  const slots =
-    week.draftAssignments[`${activeTemplate}-${d}`] ||
-    getSlotsForDay(mode,d).map(s=>({...s,staffId:null}));
-
-  h += `<div class="template-day-card">
-    <div class="template-day-title">
-      <span>${LONG_DAYS[d]}</span>
-    </div>`;
+    const slots =
+      week.draftAssignments[`${activeTemplate}-${d}`] ||
+      getSlotsForDay(mode,d).map(s=>({...s,staffId:null}));
+    h += `<div class="template-day-card"><div class="template-day-title"><span>${LONG_DAYS[d]}</span></div>`;
     slots.forEach((slot,i)=>{
       const s=staffById(slot.staffId); const cls=slot.special?'special':slot.oncall?'oncall':slot.patio?'patio':'filled';
       h += `<div class="slot ${cls}" onclick="editSlot('${activeTemplate}',${d},${i})"><div class="slot-area">${slot.area}</div><div class="slot-main">${s?s.name:'Open slot'}</div><div class="slot-time">${slot.time}${slot.oncall?' · on call':''}${slot.patio?' · patio':''}${slot.special?' · special event':''}</div></div>`;
@@ -665,7 +662,6 @@ function publishSchedule(){
     minute:'2-digit'
   });
 
-  managerScheduleView = 'published';
   render();
 }
 function csvEscape(v){ return `"${String(v ?? '').replaceAll('"','""')}"`; }
