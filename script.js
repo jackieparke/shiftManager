@@ -754,13 +754,39 @@ function renderAvailabilityForm(){
 }
 function setAvailability(staffId, dayIdx, key, value){ availability[staffId][dayIdx][key]=value; }
 function renderAvailabilityOverview(){
-  let h=`<div class="requests-wrap"><div class="sub-head"><i class="ti ti-user-check"></i> Server availability</div><div class="availability-grid">`;
-  for(let d=0; d<7; d++){
-    h+=`<div class="availability-card"><div class="availability-day">${LONG_DAYS[d]}</div>`;
-    SERVER_IDS.forEach(id=>{ const s=staffById(id), a=availability[id][d]; h+=`<div class="avail-mini"><strong>${s.name}</strong>: ${a['4pm']?'4pm ':''}${a['5pm']?'5pm ':''}${(!a['4pm']&&!a['5pm'])?'Unavailable':''}</div>`; });
-    h+=`</div>`;
-  }
-  return h+`</div></div>`;
+  let h=`<div class="requests-wrap"><div class="sub-head"><i class="ti ti-user-check"></i> Staff availability</div>`;
+
+  const sections = [
+    { label: 'Hosts', ids: HOST_IDS },
+    { label: 'Servers', ids: SERVER_IDS },
+    { label: 'Bartenders', ids: BARTENDER_IDS },
+    { label: 'Barbacks', ids: BARBACK_IDS },
+    { label: 'Bussers', ids: BUSSER_IDS },
+    { label: 'Food Runners / Expo', ids: FOODRUNNER_IDS },
+  ];
+
+  sections.forEach(section => {
+    if(!section.ids.length) return;
+    h += `<div class="sec-title" style="margin-top:16px">${section.label}</div>`;
+    h += `<div class="availability-grid">`;
+    for(let d=0; d<7; d++){
+      h += `<div class="availability-card"><div class="availability-day">${LONG_DAYS[d]}</div>`;
+      section.ids.forEach(id => {
+        const s = staffById(id);
+        const a = availability[id] && availability[id][d];
+        if(!s) return;
+        if(a){
+          h += `<div class="avail-mini"><strong>${s.name}</strong>: ${a['4pm']?'4pm ':''}${a['5pm']?'5pm ':''}${(!a['4pm']&&!a['5pm'])?'Unavailable':''}</div>`;
+        } else {
+          h += `<div class="avail-mini"><strong>${s.name}</strong>: —</div>`;
+        }
+      });
+      h += `</div>`;
+    }
+    h += `</div>`;
+  });
+
+  return h + `</div>`;
 }
 
 function findSlot(mode, day, slotIdx){
