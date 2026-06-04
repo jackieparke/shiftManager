@@ -20,6 +20,8 @@ const STAFF = [
   { id:16, name:'Lena F.', initials:'LF', color:'#EEEDFE', text:'#3C3489', role:'FoodRunner' },
   { id:17, name:'Host 1', initials:'H1', color:'#F3E8FF', text:'#6B21A8', role:'Host' },
   { id:18, name:'Host 2', initials:'H2', color:'#F3E8FF', text:'#6B21A8', role:'Host' },
+  { id:19, name:'Expo 1', initials:'E1', color:'#FFF3E0', text:'#E65100', role:'Expo' },
+  { id:20, name:'Expo 2', initials:'E2', color:'#FFF3E0', text:'#E65100', role:'Expo' },
 ];
 const SERVER_IDS = [1,2,3,4,5];
 const BARTENDER_IDS = [9,10,11,12];
@@ -28,6 +30,7 @@ const BUSSER_IDS = [14,15];
 const FOODRUNNER_IDS = [16];
 const MANAGER_IDS = [6,7,8];
 const HOST_IDS = [17,18];
+const EXPO_IDS = [19,20];
 const EMPLOYEE_IDS = STAFF.filter(s=>s.role!=='Manager').map(s=>s.id);
 const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const LONG_DAYS = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -44,7 +47,7 @@ let preferredShifts = {
   1:3, 2:3, 3:3, 4:3, 5:3,
   9:3, 10:3, 11:3, 12:3,
   13:3, 14:3, 15:3, 16:3,
-  17:3, 18:3
+  17:3, 18:3, 19:3, 20:3
 };
 
 let lastPublishedSnapshot = null;
@@ -145,6 +148,7 @@ function getStaffIdsForRole(roleName){
   if(roleName==='Busser') return BUSSER_IDS;
   if(roleName==='FoodRunner') return FOODRUNNER_IDS;
   if(roleName==='Host') return HOST_IDS;
+  if(roleName==='Expo') return EXPO_IDS;
   return EMPLOYEE_IDS;
 }
 
@@ -307,7 +311,10 @@ function hostSlotsForDay(){
 }
 
 function supportSlotsForDay(day){
-  const slots = [{role:'FoodRunner', area:'Food runner', time:'4pm'}];
+  const slots = [
+    {role:'FoodRunner', area:'Food runner', time:'4pm'},
+    {role:'Expo', area:'Expo', time:'4pm'},
+  ];
   if(day===4 || day===5){
     slots.push({role:'Barback', area:'Barback', time:'4pm'});
     slots.push({role:'Busser', area:'Downstairs busser', time:'3:30pm'});
@@ -439,7 +446,7 @@ function renderSchedule(days, isMgr, view='published') {
   const week = ensureSchedule(key);
   const source = editable ? week.draftAssignments : (week.publishedAssignments || {});
   const managerSource = editable ? week.draftManagers : (week.publishedManagers || {});
-  const supportRoles = ['Busser','Barback','FoodRunner'];
+  const supportRoles = ['Busser','Barback','FoodRunner','Expo'];
 
   let h = `<div class="schedule-wrap">${isMgr?renderModeToggle(view):''}`;
   h += `<div class="day-headers"><div></div>` + days.map((d,i)=>`<div class="day-header${isToday(d)?' today':''}">${DAYS[i]}<span class="num">${d.getDate()}</span></div>`).join('')+`</div>`;
@@ -470,12 +477,12 @@ function renderSchedule(days, isMgr, view='published') {
         byRole[r].push({slot, i});
       });
 
-      const sections = [
-        { label: 'Hosts', roles: ['Host'] },
-        { label: 'Servers', roles: ['Server'] },
-        { label: 'Bar', roles: ['Bartender','Barback'] },
-        { label: 'Support Staff', roles: ['Busser','FoodRunner'] },
-      ];
+    const sections = [
+      { label: 'Hosts', roles: ['Host'] },
+      { label: 'Servers', roles: ['Server'] },
+      { label: 'Bar', roles: ['Bartender'] },
+      { label: 'Support Staff', roles: ['Busser','Barback','FoodRunner','Expo'] },
+    ];
 
       sections.forEach(section => {
         const sectionSlots = section.roles.flatMap(r => byRole[r] || []);
@@ -578,6 +585,7 @@ function showSlotModal(prefix, dayIdx, slotIdx, slot, isNew){
       <option${slot.role==='Barback'?' selected':''}>Barback</option>
       <option${slot.role==='Busser'?' selected':''}>Busser</option>
       <option${slot.role==='FoodRunner'?' selected':''}>FoodRunner</option>
+      <option${slot.role==='Expo'?' selected':''}>Expo</option>
     </select></div>
     <div class="fgroup"><label class="flabel">Area / label</label><input type="text" id="m-area" value="${slot.area || 'Server'}" placeholder="Server, Downstairs, Upstairs, Patio, Float..." /></div>
     <div class="fgroup"><label class="flabel">Tag</label><select id="m-tag">
@@ -782,7 +790,7 @@ function exportCSV(){
   const groupForRole = (role) => {
     if(role === 'Host') return 'Hosts';
     if(role === 'Server') return 'Servers';
-    if(role === 'Bartender' || role === 'Barback') return 'Bar';
+    if(role === 'Bartender') return 'Bar';
     return 'Support Staff';
   };
 
@@ -795,8 +803,8 @@ function exportCSV(){
       const group = groupForRole(slot.role || 'Server');
       if(!groups[group][emp.name]) groups[group][emp.name] = Array(7).fill('');
       const existing = groups[group][emp.name][d];
-      const isSupportRole = ['Busser','Barback','FoodRunner'].includes(slot.role);
-      const roleLabel = isSupportRole ? ` - ${slot.role === 'FoodRunner' ? 'Expo' : slot.role}` : '';
+      const isSupportRole = ['Busser','Barback','FoodRunner','Expo'].includes(slot.role);
+      const roleLabel = isSupportRole ? ` - ${slot.role}` : '';
 
       // flag time-off conflicts
       const hasConflict = requests.some(r =>
@@ -882,13 +890,11 @@ function renderAvailabilityOverview(){
   let h=`<div class="requests-wrap"><div class="sub-head"><i class="ti ti-user-check"></i> Staff availability</div>`;
 
   const sections = [
-    { label: 'Hosts', ids: HOST_IDS },
-    { label: 'Servers', ids: SERVER_IDS },
-    { label: 'Bartenders', ids: BARTENDER_IDS },
-    { label: 'Barbacks', ids: BARBACK_IDS },
-    { label: 'Bussers', ids: BUSSER_IDS },
-    { label: 'Food Runners / Expo', ids: FOODRUNNER_IDS },
-  ];
+  { label: 'Hosts', ids: HOST_IDS },
+  { label: 'Servers', ids: SERVER_IDS },
+  { label: 'Bartenders', ids: BARTENDER_IDS },
+  { label: 'Support Staff', ids: [...BARBACK_IDS, ...BUSSER_IDS, ...FOODRUNNER_IDS, ...EXPO_IDS] },
+];
 
   sections.forEach(section => {
     if(!section.ids.length) return;
